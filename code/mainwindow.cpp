@@ -1,0 +1,972 @@
+#include "mainwindow.h"
+#include "ui_mainwindow.h"
+#include "stdlib.h"
+#include <QDebug>
+
+MainWindow::MainWindow(QWidget *parent) :QMainWindow(parent), ui(new Ui::MainWindow)
+{
+    ui->setupUi(this);
+    ui->mdiArea->setTabsMovable(true);
+    ui->mdiArea->setTabsClosable(true);
+    ui->mdiArea->setViewMode(QMdiArea::TabbedView);
+    this->error = new Error(this);
+    this->setWindowTitle("ERDdt");
+    this->makeConnections();
+    ui->mdiArea->setBackground(*new QBrush(*new QPixmap(":/img/Background.png")));
+}
+
+void MainWindow::makeConnections()
+{
+    connect(ui->menuAbout, SIGNAL(aboutToShow()), this, SLOT(about()));
+    connect(ui->actionClose, SIGNAL(triggered()), this, SLOT(closeCurrentTab()));
+    connect(ui->actionNew, SIGNAL(triggered()), this, SLOT(on_addNewTabCommButton_clicked()));
+    connect(ui->actionExit, SIGNAL(triggered()), this, SLOT(close()));
+    connect(ui->actionSave, SIGNAL(triggered()), this, SLOT(on_savePButton_clicked()));
+    connect(ui->actionSaveAs, SIGNAL(triggered()), this, SLOT(saveTabAs()));
+    connect(ui->actionSaveAll, SIGNAL(triggered()), this, SLOT(saveAllTabs()));
+    connect(ui->actionOpen, SIGNAL(triggered()), this, SLOT(on_openPButton_clicked()));
+}
+
+void MainWindow::about()
+{
+    QMessageBox *dialog = new QMessageBox(this);
+    dialog->setIcon(QMessageBox::Information);
+    dialog->setText("Application created by Kevin Ruau and Daniel Fujii.\nFinal project for Data Storage Structures and Data Bases I, UNICEN 2016.");
+    dialog->exec();
+    ui->menuAbout->clearFocus();
+}
+
+MainWindow::~MainWindow()
+{
+    delete ui;
+}
+
+bool MainWindow::deleteItem(IGraphicItem *item)
+{
+    QMdiSubWindow* sub = ui->mdiArea->activeSubWindow();
+    if(sub!=0){
+        QGraphicsScene *scene = ((QGraphicsView*)(sub->widget()))->scene();
+        if(scene){
+           scene->removeItem(item);
+           return true;
+        }
+    }
+    else error->setError(Error::NoTab);
+    return false;
+}
+
+bool MainWindow::addItem(IGraphicItem *item)
+{
+    QMdiSubWindow* sub = ui->mdiArea->activeSubWindow();
+    if(sub!=0){
+        GraphicView * view = (GraphicView*)sub->widget();
+        view->scene()->addItem(item);
+        item->setGraphicView(view);
+        if (item->type()!= EntityItem::Type)
+            item->setZValue(-500.0);
+        view->setSaved(false);
+    }
+    return true;
+}
+
+void MainWindow::setSaved(bool saved)
+{
+    QMdiSubWindow* sub = ui->mdiArea->activeSubWindow();
+    if (sub!=NULL){
+        GraphicView * view = (GraphicView*)sub->widget();
+       view->setSaved(saved);
+    }
+}
+
+void MainWindow::on_addNewTabCommButton_clicked()
+{
+    QGraphicsView *view = new GraphicView(ui->mdiArea);
+    ui->mdiArea->addSubWindow(view);
+    view->setRenderHint(QPainter::Antialiasing);
+    view->setDragMode(QGraphicsView::RubberBandDrag);
+    view->show();
+}
+
+void MainWindow::on_addNewEntityCommButton_clicked()
+{
+    QMdiSubWindow* sub = ui->mdiArea->activeSubWindow();
+    if(sub!=0){
+        QGraphicsScene *scene = ((QGraphicsView*)(sub->widget()))->scene();
+        if (scene){
+            QList<QGraphicsItem*> items = scene->items();
+            entityDialog * dialog = new entityDialog(items,this);
+            dialog->setModal(true);
+            dialog->show();
+        }
+    }
+    else error->setError(Error::NoTab);
+}
+
+void MainWindow::on_addNewAttributeCommButton_clicked()
+{
+    QMdiSubWindow* sub = ui->mdiArea->activeSubWindow();
+    if(sub!=0){
+        QGraphicsScene *scene = ((QGraphicsView*)(sub->widget()))->scene();
+        if(scene){
+            QList<QGraphicsItem*> items = scene->items();
+            if(!items.empty()){
+                AttDialog *d = new AttDialog(items, this); // gives dialog all current items on the scene
+                d->setModal(true);
+                d->show();
+            }
+            else error->setError(Error::NoItems);
+        }
+    }
+    else error->setError(Error::NoTab);
+}
+
+void MainWindow::on_getDerivationCommButton_clicked()
+{
+    QMdiSubWindow* sub = ui->mdiArea->activeSubWindow();
+    if(sub!=0){
+        QGraphicsScene *scene = ((QGraphicsView*)(sub->widget()))->scene();
+        if(scene){
+            QList<QGraphicsItem*> items = scene->items();
+            if(!items.empty()){
+                QString path;
+                if (((GraphicView*)(sub->widget()))->isSaved())
+                     path = QFileDialog::getSaveFileName(this,tr("Save ELExt derivation"),
+                                                         QDir::currentPath()+"/"+ui->mdiArea->currentSubWindow()->windowTitle()+".ele"
+                                                         ,tr(".ele"));
+                else path = QFileDialog::getSaveFileName(this,tr("Save ELExt derivation"),QDir::currentPath()+".ele",tr(".ele"));
+                if (path.right(4)!=".ele") path+=".ele";
+                if (path.size()<=4) //just the extension
+                    return;
+                QFile output(path);
+                if (!output.open(QIODevice::WriteOnly | QIODevice::Truncate))
+                    return;
+                QString tmp;
+                foreach(QGraphicsItem* item, items){
+                    QString aux = ((IGraphicItem*)item)->getDerivation();
+                    if (error->getError()!=Error::NoError) return;
+                    if (!aux.isEmpty())
+                        tmp += aux +"\n";
+                }
+                QTextStream out(&output);
+                out << tmp;
+                output.close();
+                if (!((GraphicView*)(sub->widget()))->isSaved()){
+                    path.chop(4);   //remove .ele extension
+                    ((GraphicView*)sub->widget())->setPath(path);
+                    ((GraphicView*)sub->widget())->saveView();
+                }
+            }
+            else error->setError(Error::NoItems);
+        }
+    }
+    else error->setError(Error::NoTab);
+}
+
+void MainWindow::closeCurrentTab()
+{
+    QMdiSubWindow* sub = ui->mdiArea->activeSubWindow();
+    if(sub!=0)
+        this->closeTab(sub);
+    else qApp->quit();
+}
+
+void MainWindow::on_savePButton_clicked()
+{
+    QMdiSubWindow* sub = ui->mdiArea->activeSubWindow();
+    if(sub!=0)
+        ((GraphicView*)(sub->widget()))->saveView();
+
+}
+
+void MainWindow::saveTabAs()
+{
+    bool ok;
+    QMdiSubWindow* sub = ui->mdiArea->activeSubWindow();
+    if (sub!=0)
+        ((GraphicView*)sub->widget())->saveAs(ok);
+}
+
+void MainWindow::saveAllTabs()
+{
+    foreach(QMdiSubWindow *sub, ui->mdiArea->subWindowList())
+        ((GraphicView*)sub->widget())->saveView();
+}
+
+bool MainWindow::close()
+{
+    foreach(QMdiSubWindow *sub, ui->mdiArea->subWindowList()){
+        if(!closeTab(sub)){
+            return false;
+        }
+    }
+    qApp->exit();
+    return true;
+}
+
+bool MainWindow::closeTab(QMdiSubWindow* sub)
+{
+    if(sub!=0){
+        GraphicView *subwindow = (GraphicView*)(sub->widget());
+        if(subwindow->isSaved()){
+            sub->close();
+            return true;
+        }
+        else{
+            QMessageBox msgBox(this);
+            msgBox.setTextFormat(Qt::RichText);
+            QString name = subwindow->getName();
+            if(name.isEmpty())
+                msgBox.setText("<div align=""center""><b>The file is not saved</b></div>");
+            else msgBox.setText("<div align=""center""><b>The file '"+name +"' is not saved</b></div>");
+            msgBox.setInformativeText(tr("<div align=""center"">Do you want to save changes?</div>"));
+            msgBox.setIcon(QMessageBox::Question);
+            QAbstractButton *buttonSave = msgBox.addButton(tr("Save"), QMessageBox::ActionRole);
+            QAbstractButton *buttonClose = msgBox.addButton(tr("Close without saving"), QMessageBox::ActionRole);
+            /*QAbstractButton *buttonCancel = */msgBox.addButton(tr("Cancel"), QMessageBox::ActionRole);
+            msgBox.exec();
+            if(msgBox.clickedButton()==buttonSave){
+                if(subwindow->saveView()){
+                    sub->close();
+                    return true;
+                }
+                else return false;
+            }
+            else if(msgBox.clickedButton()==buttonClose){
+                sub->close();
+                return true;
+            }
+            else return false;
+        }
+    }
+    return false;
+}
+
+Entity *MainWindow::getEnt(QList<Entity *> items, QString name, bool pk)
+{
+    foreach(Entity * i, items){
+        if (pk){
+            if (i->getPrimaryKey()->getName() == name)
+                return i;
+        } else{
+            if (i->getName() == name)
+                return i;
+        }
+    }
+    return NULL;
+}
+
+QGraphicsItem *MainWindow::getItem(QList<QGraphicsItem *> items, QString name)
+{
+    foreach(QGraphicsItem * item, items){
+        if (((IGraphicItem*)item)->getName()==name)
+                return item;
+    }
+    return NULL;
+}
+
+void MainWindow::addN1Rship(Relationship *rship)
+{
+    QList<Cardinality*> cards = rship->getCardinalities();
+    if (cards.size()==2 && ((cards.at(0)->getMax()=="1" && cards.at(1)->getMax()=="1") ||           //1:1
+        (cards.at(0)->getMax()=="1" && cards.at(1)->getMax()!="1") || (cards.at(0)->getMax()!="1" && cards.at(1)->getMax()=="1"))){ //N:1
+        if (cards.at(0)->getMax()=="1" && cards.at(1)->getMax()=="1"){
+            if (cards.at(0)->getMin()==0 && cards.at(1)->getMin()==1)
+                rship->getEntities().at(1)->addN1Rship(rship);
+            else{
+                if (cards.at(0)->getMin()==1 && cards.at(1)->getMin()==0){
+                    rship->getEntities().at(0)->addN1Rship(rship);
+                }
+                else{    //pedir input al usuario
+                    QStringList items;
+                    items << rship->getEntities().at(0)->getName() << rship->getEntities().at(1)->getName();
+                    bool ok;
+                    QString item = QInputDialog::getItem(this, tr("Alternate key in 1:1 relationship"),
+                                                         "Select the entity that will have the alternate key in the 1:1 relationship '"
+                                                         +rship->getName()+"':"
+                                                         ,items, 0, false, &ok);
+                    if (ok && !item.isEmpty())
+                        foreach(Entity * ent, rship->getEntities())
+                            if (ent->getName()==item){
+                                ent->addN1Rship(rship);
+                                return;
+                            }
+                }
+            }
+        }
+        else{
+            if (cards.at(0)->getMax()=="1")
+                rship->getEntities().at(1)->addN1Rship(rship);
+            else rship->getEntities().at(0)->addN1Rship(rship); }
+    }
+}
+
+void MainWindow::on_openPButton_clicked()
+{
+    QString filter = "DERExt (*.dere)";
+    QString path = QFileDialog::getOpenFileName(this, "Open File", "", filter);
+    if(!path.isEmpty()){
+        QFile input(path);
+        if (!input.open(QIODevice::ReadOnly | QIODevice::Text))
+            return;
+        QDomDocument document, b;
+        document.setContent(&input);
+        input.close();
+        path.chop(5); //removes file extension
+        QDomNode version = document.childNodes().at(0);
+        if(version.toElement().tagName()=="DERExt"){
+            QDomNodeList root = version.childNodes();
+            this->on_addNewTabCommButton_clicked();
+            QList<QDomElement> weakEntities;
+            QList<QGraphicsItem*> items;
+            GraphicView *subwindow;
+            QMdiSubWindow* sub = ui->mdiArea->activeSubWindow();
+            if (sub!=0){
+                subwindow = (GraphicView*)(sub->widget());
+                for(int i=0 ; i<root.count() ; i++){
+                    QDomNode node = root.at(i);
+                    if (node.isElement()){
+                        QDomElement element = node.toElement();
+                        QGraphicsScene *scene = subwindow->scene();
+                        if(scene){
+                            if (element.tagName() == "Entity" && element.attribute("weak").toInt() == true)
+                                weakEntities.append(element);
+                            else
+                                loadItem(element,items,weakEntities);
+                            subwindow->setPath(path);
+                        }
+                    }
+                }
+                foreach(QGraphicsItem * item, items){
+                    subwindow->scene()->addItem(item);
+                    ((IGraphicItem*)item)->setGraphicView(subwindow);
+                }
+                subwindow->setSaved(true);
+            }
+        }
+        else error->setError(Error::InvalidFile);
+    }
+}
+
+void MainWindow::loadItem(QDomElement element, QList<QGraphicsItem*> & items,QList<QDomElement> & weakEntities, bool loadELE)
+{
+    IGraphicItem * item;
+    if(element.tagName()=="Entity"){
+        if (element.attribute("weak").toInt() == true){
+            item = new EntityItem(element.attribute("name"), &element, NULL, this->error, this,
+                                  true, (Entity*)((EntityItem*)getItem(items,element.attribute("strongEnt")))->getERItem());
+            item->setPos(element.attribute("x").toInt(), element.attribute("y").toInt());
+        }
+        else{
+            item = new EntityItem(element.attribute("name"), &element, NULL, this->error, this);
+            item->setPos(element.attribute("x").toInt(), element.attribute("y").toInt());
+        }
+    }
+    if (element.tagName()=="RUnary" || element.tagName()=="RBinary" || element.tagName()=="RTernary"){
+        //cargar entidades debiles luego de las regulares, pero antes de las relaciones
+        while (!weakEntities.empty()){
+            QDomElement elem = weakEntities.front();
+            EntityItem* strongEnt = (EntityItem*)getItem(items,elem.attribute("strongEnt"));
+            if (strongEnt != NULL){      //la entidad de la que depende ya fue cargada
+                loadItem(elem, items, weakEntities,loadELE);
+                weakEntities.pop_front();
+            }
+            else{   //quitar del principio y llevarlo al final para cargarlo luego
+                weakEntities.pop_front();
+                weakEntities.append(elem);
+            }
+        }
+//        weakEntities.clear();
+
+        int ent, card;
+        QList<QString> onDelete,onUpdate,matching;
+        QList<EntityItem*> ents;
+        QList<Cardinality*> cards;
+        ent = (element.tagName()=="RUnary")?1:2;
+        if (ent!=1) ent = (element.tagName()=="RTernary")?3:2;
+        card = (element.tagName()=="RTernary")?3:2;
+
+        for (int i = 0; i < ent; i++){
+            ents << (EntityItem*)getItem(items,element.attribute("name"+QString::number(i)));
+            onDelete << element.attribute("onDelete"+QString::number(i));
+            onUpdate << element.attribute("onUpdate"+QString::number(i));
+            matching << element.attribute("match"+QString::number(i));
+        }
+        for (int j = 0; j < card; j++)
+            cards << new Cardinality(element.attribute("min"+QString::number(j)).toInt(),element.attribute("max"+QString::number(j)));
+
+        if (element.tagName()=="RUnary"){
+            item = new RUnaryItem(element.attribute("name"), NULL, &element, this->error, this, ents, cards);
+            ((Relationship*)item->getERItem())->setRolename(element.attribute("rolename"));
+        }
+        if (element.tagName()=="RBinary"){
+            if (element.attribute("dep").toInt() == true){
+                if (element.attribute("firstWeak").toInt() == true)
+                    item = new RBinaryItem(element.attribute("name"), NULL, &element, this->error,this, ents, cards,true,true);
+                else item = new RBinaryItem(element.attribute("name"), NULL, &element, this->error,this, ents, cards,true,false);
+            } else item = new RBinaryItem(element.attribute("name"), NULL, &element, this->error,this, ents, cards);
+            ((Relationship*)item->getERItem())->setRolename(element.attribute("rolename"));
+        }
+        if (element.tagName()=="RTernary") item = new RTernaryItem(element.attribute("name"), NULL, &element, this->error, this, ents,cards);
+
+        ((Relationship*)item->getERItem())->setOnDelete(onDelete);
+        ((Relationship*)item->getERItem())->setOnUpdate(onUpdate);
+        ((Relationship*)item->getERItem())->setMatch(matching);
+        item->setPosition(QPointF(element.attribute("x").toFloat(),element.attribute("y").toFloat()));
+        item->setZValue(-500.0);
+        if (loadELE)
+            addN1Rship((Relationship*)item->getERItem());
+    }
+    if(element.tagName()=="Hierarchy"){
+        QList<EntityItem*> ents;
+
+        int ent = element.attribute("cont").toInt(nullptr, 10);
+        for (int i = 0; i < ent; i++)
+            ents << (EntityItem*)getItem(items,element.attribute("name"+QString::number(i)));
+        bool exc = false;
+        bool tot = false;
+        if(element.attribute("exclusive")=="true")
+            exc = true;
+        if(element.attribute("total") == "true")
+            tot = true;
+        QString typeName = element.attribute("typeName");
+        item = new HierarchyItem(NULL, this->error, this, typeName, exc, tot, ents);
+        item->setZValue(-500.0);
+    }
+
+
+    //more elements should be considered here
+    items << item;
+}
+
+void MainWindow::on_exitPButton_clicked()
+{
+    this->close();
+}
+
+void MainWindow::closeEvent(QCloseEvent *event)
+{
+    if(!this->close())
+        event->ignore();
+}
+
+void MainWindow::on_cleanPButton_clicked()
+{
+    QMdiSubWindow* sub = ui->mdiArea->activeSubWindow();
+    if(sub!=0){
+        ((GraphicView*)sub->widget())->scene()->clear();
+        ((GraphicView*)sub->widget())->setSaved(false);
+    }
+}
+
+void MainWindow::on_editKeysCommButton_clicked()
+{
+    QMdiSubWindow* sub = ui->mdiArea->activeSubWindow();
+    if(sub!=0){
+        QGraphicsScene *scene = ((QGraphicsView*)(sub->widget()))->scene();
+        if(scene){
+            QList<QGraphicsItem*> items = scene->items();
+            if(!items.empty()){
+                AttDialogEdit *d = new AttDialogEdit(items, this); // gives dialog all current items on the scene
+                d->setModal(true);
+                d->show();
+            }
+            else error->setError(Error::NoItems);
+        }
+    }
+    else error->setError(Error::NoTab);
+}
+
+void MainWindow::on_removeEntityCommButton_clicked()
+{
+    QMdiSubWindow* sub = ui->mdiArea->activeSubWindow();
+    if(sub!=0){
+        QGraphicsScene *scene = ((QGraphicsView*)(sub->widget()))->scene();
+        if(scene){
+            QList<QGraphicsItem*> items = scene->items();
+            if(!items.empty()){
+                RemoveDialog *tmp = new RemoveDialog(items, this);
+                tmp->setModal(true);
+                tmp->show();
+            }
+            else error->setError(Error::NoItems);
+        }
+    }
+    else error->setError(Error::NoTab);
+}
+
+
+void MainWindow::on_RelationshipCommButton_clicked()
+{
+    QMdiSubWindow* sub = ui->mdiArea->activeSubWindow();
+    if (sub!=0){
+        QGraphicsScene *scene = ((QGraphicsView*)(sub->widget()))->scene();
+        if (scene){
+            QList<QGraphicsItem*> items = scene->items();
+            if (!items.empty()){
+                RelationshipDialog * dialog = new RelationshipDialog(items,this);
+                dialog->setModal(true);
+                dialog->show();
+            }
+            else error->setError(Error::NoItems);
+        }
+    }
+    else error->setError(Error::NoTab);
+}
+
+Entity *MainWindow::parseEntityELE(QString input, QList<Entity *> loadedItems, QList<QString> & weaks)
+{
+    int index = 0;
+    QList<Attribute*> aux;
+    QString name;
+    bool isWeak = false;
+
+    Entity *ent = NULL;
+
+    QString pk, strongPk;
+    if(input[index] == 'R'){ //es una entidad regular
+        index+=2; //salteo R_
+        while(input[index]!='[') //nombre
+            name+=input[index++];
+        index++;//saltea el [
+        while(input[index]!=';') //pk
+            pk+=input[index++];
+    }
+    else
+        if (input[index] == 'D'){
+            index+=2; //salteo D_
+            while(input[index]!='[') //nombre
+                name+=input[index++];
+            index++;//saltea el [
+
+            while(input[index]!=',' && input[index]!='(')
+                strongPk+=input[index++];   //saltar pk de strongEnt
+            if (input[index]=='('){
+                while (input[index]!=')') index++;
+                index++;
+            }
+            index++;
+
+            int comma = 0;
+            while(comma>=0){
+                if (input[index]=='(') comma++;
+                if (input[index]==')' || input[index]==','
+                        || input[index]==';') comma--;
+                if (input[index]!=';' || comma>=0)
+                    pk+=input[index++];
+            }
+            isWeak = true;
+        }
+
+    int inxPk = 0;
+    Attribute *attPk;
+    if(pk.contains("(")){ //pk compuesta
+        QList<QString> atts;
+        QString namePkComp;
+        while(pk[inxPk]!='(') //nombre pk compuesta
+            namePkComp+=pk[inxPk++];
+        inxPk++; //saco el (
+        while(pk[inxPk]!=')'){
+            QString att;
+            while(pk[inxPk]!=',' && pk[inxPk]!=')')
+                att+=pk[inxPk++];
+            atts.push_back(att);
+            if(pk[inxPk]!=')')
+                inxPk++;//saco la coma
+        }
+        attPk = new AttComp(namePkComp, false, atts.size(), false, true, false, false);
+        foreach(QString s, atts)
+            attPk->addAttribute(new AttSimple(s, false, false, false, false, true), namePkComp);
+    }
+    else attPk = new AttSimple(pk, false, false, true, false, false);
+
+    if (isWeak){
+        Entity * strongEnt = getEnt(loadedItems,strongPk,true);
+        ent = new WeakEntity(name,this->error,strongEnt);
+        if (strongEnt == NULL && !weaks.contains(input))
+            weaks << input;
+    }
+    else
+        ent = new Entity(name, this->error);
+    ent->setPrimaryKey(attPk);
+    aux.clear();
+
+    index++; // salteo el ;
+
+    //CLAVE SECUNADRIAS
+
+    if(input[index]!=';'){
+        QString sks;
+        while(input[index]!=';')
+            sks+=input[index++];
+        int inxSk = 0;
+        QList<QString> skList;
+        while(inxSk<sks.size()){
+            bool comp = false;
+            QString s;
+            while((sks[inxSk]!=',' || comp) && inxSk<sks.size()){
+                if(sks[inxSk]=='(')
+                    comp = true;
+                if(sks[inxSk]==')')
+                    comp = false;
+                s+=sks[inxSk++];
+            }
+            skList.append(s);
+            if(sks.size()!=inxSk)
+                inxSk++;
+        }
+        foreach(QString s, skList){
+            if(s.contains("{")){
+                if(s.contains(QChar(0x00AC)))
+                    aux.append(new AttSimple(s.remove(QChar(0x00AC)).remove("{").remove("}"), true, true, false, true, false));
+                else aux.append(new AttSimple(s.remove("{").remove("}"), false, true, false, true, false));
+            }
+            else if(s.contains("(")){
+                int inx = 0;
+                QList<QString> atts;
+                bool neg = false;
+                if(s.contains(QChar(0x00AC))){
+                    neg = true;
+                    inx++;
+                }
+                QString nameComp;
+                while(s[inx]!='(') //nombre compuesto
+                    nameComp+=s[inx++];
+                inx++; //saco el (
+                while(s[inx]!=')'){
+                    QString att;
+                    while(s[inx]!=',' && s[inx]!=')')
+                        att+=s[inx++];
+                    atts.push_back(att);
+                    if(s[inx]!=')')
+                        inx++;//saco la coma
+                }
+                Attribute *attC;
+                if(neg)
+                    attC = new AttComp(nameComp.remove(QChar(0x00AC)), neg, atts.size(), false, false, true, false);
+                else attC = new AttComp(nameComp, neg, atts.size(), false, false, true, false);
+                foreach(QString b, atts)
+                    attC->addAttribute(new AttSimple(b, neg, false, false, false, true), nameComp);
+                aux.append(attC);
+            }
+            else{
+                if(s.contains(QChar(0x00AC)))
+                    aux.append(new AttSimple(s.remove(QChar(0x00AC)), true, false, false, true, false));
+                else aux.append(new AttSimple(s, false, false, false, true, false));
+            }
+        }
+
+        foreach(Attribute *a, aux)
+            ent->setSecondaryKey(a);
+        aux.clear();
+    }
+    index++; //salteo el ;
+
+    QString attributes = input.right(input.size()-index);
+    parseAttributes(ent,attributes);
+
+    if (isWeak && ((WeakEntity*)ent)->getStrongEntity()==NULL) return NULL;       //couldn't be fully loaded
+    return ent;
+}
+
+Relationship *MainWindow::parseRelationshipELE(QString input, QList<Entity*> loadedItems)
+{
+    int index = 0;
+    int commas, cardNum, entNum, cont;
+    QString name;
+    QList<Entity*> entities;
+    QList<Cardinality*> cards;
+    Relationship * item;
+    QString fk;
+
+    //obtain the arity of the relationship
+    while(input[index++]!='_') cont++;
+    //obteain the name of the relationship. As 1:1 rships have an _ at the end, we have to remove that.
+    while(input[index]!='[') name+=input[index++];
+    if (name.size()>2 && name[name.size()-2]=='_' && input.left(2)=="11")
+        if (name[name.size()-1]=='2') return NULL;      //as 1:1 rships are done twice, you only load one of them of the ELE
+        else name.chop(2);
+
+    //ternary rship or NN binary can be created by going from the back
+    if (cont==3 || input.left(2)=="NN"){
+        commas = cont = entNum = cardNum = (cont==3) ? 3 : 2;
+        index = input.lastIndexOf(";")+1;     //last section are the FKs
+        while (commas != 0){
+            if (input[index]=='(')  commas++;   //starts compound PK
+            else
+                if (input[index]==')')  commas--;
+                else
+                    if ((input[index]==',' || input[index]==']') && cont==commas){  //ends FK
+                        QString aux;
+                        int i = 0;
+                        while (fk[i]!='.'){     //just get the Name of entity, not it's pk
+                            aux += fk[i];
+                            i++;
+                        }
+                        entities << getEnt(loadedItems,aux);
+                        fk.clear();
+                        cont--;
+                        commas--;
+                    }
+                    else
+                        if (cont==commas)   fk+=input[index];
+            index++;
+        }
+    } else{
+        entNum = cardNum = 2;
+        index = input.indexOf("[")+1;
+        QString ent;
+        while (input[index]!='.') ent+= input[index++];
+        entities << getEnt(loadedItems,ent);
+        ent.clear();
+        if (input.left(2)=="11"){       //in 1:1 can obtain the entity from primary and alternative keys
+            while (input[index]!=';') index++;
+            index++;    //jump the ;
+            while (input[index]!='.') ent+= input[index++];
+            entities << getEnt(loadedItems,ent);
+        }
+        else{                           //in N:1 you get the entities from the beggining and the back
+            index = input.size()-1;
+            while (input[index]!=';') ent.prepend(input[index--]);
+            ent.left(ent.indexOf("."));
+            entities << getEnt(loadedItems,ent.left(ent.indexOf(".")));
+        }
+    }
+
+    //parse cardinalitites
+    QString cardsTxt = input.right(input.size()-input.indexOf(";(")-1);
+    cont = index = 0;
+    while (cont < cardNum){
+        index++;    //avoid the (
+        QString max,min;
+        while (cardsTxt[index]!=',') min+=cardsTxt[index++];
+        index++;    //avoid the ,
+        while (cardsTxt[index]!=')') max+=cardsTxt[index++];
+        index = index + 2;    //avoid the ) and the ,
+        Cardinality * card = new Cardinality(QString(min).toInt(),max);
+        cards.append(card);
+        cont++;
+    }
+
+    if (entNum==3) item = new RTernary(name,error,entities,cards);
+    else
+        item = new RBinary(name,this->error,entities,cards);
+
+    //Attributes
+    QString atts;
+    index = input.indexOf(";(");
+    cont=0;
+    while (cont < 3){
+        atts.prepend(input[index--]);
+        if (input[index]==';') cont++;
+    }
+    parseAttributes(item,atts);
+    return item;
+}
+
+void MainWindow::parseERItem(QString input, QList<ERItem *> & loadedItems, QList<Entity *> & loadedEnts, QList<QString> & weaks)
+{
+    ERItem * item;
+    if (input.size()>0){
+        if (input[0]=='R' || input[0]=='D'){
+            item = parseEntityELE(input,loadedEnts,weaks);
+            if (item!=NULL){
+                loadedItems << (Entity*)item;
+                loadedEnts << (Entity*)item;
+            }
+        }
+        else{                                       //here we assume that there are no other things apart from entities and relationships
+            while (!weaks.empty()){                  //load weak entities that couldn't be loaded before
+                QString weak = weaks.front();
+                Entity * ent = parseEntityELE(weak,loadedEnts,weaks);
+                weaks.pop_front();
+                if (ent!=NULL){
+                    loadedItems << ent;
+                    loadedEnts << ent;
+                }
+                else weaks.append(weak);
+            }
+            item = parseRelationshipELE(input,loadedEnts);
+            if (item != NULL){
+                loadedItems << item;
+                addN1Rship((Relationship*)item);
+            }
+        }
+    }
+}
+
+void MainWindow::on_getSQLDerivationCommButton_clicked()
+{
+    QMessageBox msgBox(this);
+        msgBox.setTextFormat(Qt::RichText);
+        msgBox.setText("<div align=""center""><b>What do you want to do?</b></div>");
+        msgBox.setIcon(QMessageBox::Question);
+        QAbstractButton *buttonELE = msgBox.addButton(tr("Open ELE"), QMessageBox::ActionRole);
+        QAbstractButton *buttonELET = msgBox.addButton(tr("Open Late ELE"), QMessageBox::ActionRole);
+        /*QAbstractButton *buttonCancel = */msgBox.addButton(tr("Cancel"), QMessageBox::ActionRole);
+        msgBox.exec();
+        if(msgBox.clickedButton()==buttonELE){
+            QString filter = "Ele (*.ele)";
+            QString path = QFileDialog::getOpenFileName(this, "Open File", "", filter);
+            if(!path.isEmpty()){
+                QFile file(path);
+                if (!file.open(QIODevice::ReadOnly | QIODevice::Text))
+                    return;
+                QTextStream in(&file);
+                QString input = in.readLine();
+                QList<ERItem*> items;
+                QList<Entity*> loadedEnts;
+                QList<QString> weaks;
+                while (!input.isNull()){
+                    parseERItem(input,items,loadedEnts,weaks);
+                    input = in.readLine();
+                }
+                SQLDialog *dialog = new SQLDialog(items, this->error, this);
+                dialog->show();
+                file.close();
+            }
+        }
+        else if(msgBox.clickedButton()==buttonELET){
+            QString filter = "DERExt (*.eleT)";
+            QString path = QFileDialog::getOpenFileName(this, "Open File", "", filter);
+            if(!path.isEmpty()){
+                QFile input(path);
+                if (!input.open(QIODevice::ReadOnly | QIODevice::Text))
+                    return;
+                QDomDocument document, b;
+                document.setContent(&input);
+                input.close();
+                path.chop(5); //removes file extension
+                QDomNode version = document.childNodes().at(0);
+                if(version.toElement().tagName()=="DERExt"){
+                    QDomNodeList root = version.childNodes();
+                    QList<ERItem*> items;
+                    QList<QDomElement> weakEnts;
+                    QList<QGraphicsItem*> loadedItems;
+                    for(int i=0 ; i<root.count() ; i++){
+                        QDomNode node = root.at(i);
+                        if (node.isElement()){
+                            QDomElement element = node.toElement();
+                            loadItem(element,loadedItems,weakEnts,true);
+                        }
+                    }
+                    foreach(QGraphicsItem * item, loadedItems)
+                        items << ((IGraphicItem*)item)->getERItem();
+                    SQLDialog *dialog = new SQLDialog(items, this->error, this);
+                    dialog->show();
+                }
+                else error->setError(Error::InvalidFile);
+            }
+
+        }
+}
+
+//input must start with the attributes directly.
+void MainWindow::parseAttributes(ERItem *item, QString input)
+{
+    QList<Attribute*> aux;
+    int index = 0;
+    //ATRIBUTOS SIMPLES
+    if(input[index]!=';'){
+        Attribute *attSim;
+        while(input[index]!=';'){
+            QString attS;
+            while(input[index]!=',' && input[index]!=';')
+                attS+=input[index++];
+            if(input[index]!=';')
+                index++;
+            if(attS.contains(QChar(0x00AC)))
+                attSim = new AttSimple(attS.remove(QChar(0x00AC)), true, false, false, false, false);
+            else attSim = new AttSimple(attS, false, false, false, false, false);
+            aux.append(attSim);
+        }
+    }
+
+    foreach(Attribute *a, aux)
+        item->addAttribute(a,"", this->error);
+    aux.clear();
+
+    index++; //salteo el ;
+
+    //ATRIUTOS COMPUESTOS
+    if(input[index]!=';'){
+        while(input[index]!=';'){
+            bool neg = false;
+            if(QString(input[index]).contains(QChar(0x00AC))){
+                neg = true;
+                index++;
+            }
+            QString nameComp;
+            while(input[index]!='(') //nombre compuesto
+                nameComp+=input[index++];
+            index++; //salteo el (
+            QList<Attribute *> atts;
+            while(input[index]!=')'){
+                QString att;
+                while(input[index]!=',' && input[index]!=')')
+                    att+=input[index++];
+                if(input[index]!=')')
+                    index++;
+                atts.append(new AttSimple(att, neg, false, false, false, true));
+            }
+            index++; //salteo el )
+            Attribute *attC;
+            if(neg)
+                attC= new AttComp(nameComp.remove(QChar(0x00AC)), true, atts.size(), false, false, false, false);
+            else attC= new AttComp(nameComp, false, atts.size(), false, false, false, false);
+            foreach(Attribute *a, atts)
+                attC->addAttribute(a, nameComp);
+            aux.append(attC);
+            if(input[index]==',')
+                index++; //salteo la ,
+        }
+    }
+
+    foreach(Attribute *a, aux)
+        item->addAttribute(a, "", this->error);
+    aux.clear();
+
+    index++; //saco el ;
+
+    //ATRIBUTOS MULTIVALUADOS
+    if(input[index]!=';'){
+        Attribute *attM;
+        while(input[index]!=';'){
+            bool neg = false;
+            if(QString(input[index]).contains(QChar(0x00AC))){
+                neg = true;
+                index+=2;
+            }
+            else index++; //salteo {
+            QString attS;
+            while(input[index]!='}')
+                attS+=input[index++];
+            index++; //salteo }
+            if(input[index]!=';')
+                index++; //salteo ,
+            attM = new AttSimple(attS, neg, true, false, false, false);
+            aux.append(attM);
+        }
+    }
+
+    foreach(Attribute *a, aux)
+        item->addAttribute(a, "", this->error);
+    aux.clear();
+}
+
+void MainWindow::on_RelationshipCommButton_2_clicked()
+{
+    QMdiSubWindow* sub = ui->mdiArea->activeSubWindow();
+    if (sub!=0){
+        QGraphicsScene *scene = ((QGraphicsView*)(sub->widget()))->scene();
+        if (scene){
+            QList<QGraphicsItem*> items = scene->items();
+            if (!items.empty()){
+                HierarchyDialog * dialog = new HierarchyDialog(items, this);
+                dialog->setModal(true);
+                dialog->show();
+            }
+            else error->setError(Error::NoItems);
+        }
+    }
+    else error->setError(Error::NoTab);
+}

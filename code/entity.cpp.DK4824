@@ -1,0 +1,354 @@
+#include "entity.h"
+
+#include <QDebug>
+
+Entity::Entity(QString name, Error * error)
+{
+    this->name = name;
+    this->primaryKey = NULL;
+    this->error = error;
+    this->altKey = 1;
+}
+
+QString Entity::getName()
+{
+    return this->name;
+}
+
+QString Entity::setName(QString name)
+{
+    this->name = name;
+}
+
+QString Entity::getDerivation()
+{
+    QString aux("");
+    QList<Attribute*> derArr[4];
+    foreach(Attribute* att, secondaryKeys)
+        derArr[secondaryKey].append(att);
+    foreach(Attribute* att, atts)
+        att->getDeriveList(derArr);
+    if(primaryKey!=NULL){
+        aux = "R_"+this->getName()+"["+primaryKey->derive()+";";
+        for(int i = secondaryKey ; i<=multAtts ; i++){
+            QString s;
+            QList<Attribute*> a = derArr[i];
+            if(a.size()!=0){
+                QList<Attribute*>::iterator it;
+                for(it = a.begin() ; it!= a.end() ; it++)
+                    s+=(*it)->derive()+",";
+                s.chop(1); //erase last comma
+                aux.append(s);
+            }
+            aux.append(";");
+        }
+        aux.append("]");
+    }
+    else error->setError(Error::NoPrimaryKey);
+    return aux;
+}
+
+QString Entity::getSQL()
+{
+    QList<QString> tables, types, constraints;
+    QString tmp, final;
+
+    if(primaryKey!=NULL){
+        tmp.append("CREATE TABLE "+this->getName()+"\n(\n");
+        primaryKey->addToSQL(tmp, this->getName(), tables, types, constraints, primaryKey, NULL);
+        foreach(Attribute *att, secondaryKeys)
+            att->addToSQL(tmp, this->getName(), tables, types, constraints, primaryKey, NULL);
+        foreach(Attribute *att, atts)
+            att->addToSQL(tmp, this->getName(), tables, types, constraints, primaryKey, NULL);
+        QString aux;
+        foreach(QString s, primaryKey->getSQLName())
+            aux += s+", ";
+        aux.chop(2);
+        foreach(QString a, constraints)
+            tmp.append(a);
+        tmp.append("\n\tCONSTRAINT PK_"+this->getName()+primaryKey->getName()+" PRIMARY KEY ("+aux+")");
+        tmp.append("\n);");
+    }
+    else error->setError(Error::NoPrimaryKey);
+    foreach(QString s, types)
+        final.append(s+"\n\n");
+    final.append(tmp+"\n\n");
+    foreach(QString s, tables)
+        final.append(s+"\n\n");
+    return final;
+}
+
+bool Entity::moveAttribute(QString attribute, int pos, QTableWidget *table)
+{
+    foreach(Attribute * att, this->atts){
+        if (att->getName() == attribute && att->moveAttribute(attribute,pos,table)){        //simple or comp parent attribute
+            if (pos>=0 && pos<atts.size()){
+                qDebug() << "parent:" << att->getName();
+                Attribute * aux = att;
+                atts.removeOne(aux);
+                atts.insert(pos,aux);
+            }
+            return true;
+        }
+        if (att->getAttributes().size()>1 && att->moveAttribute(attribute,pos,table))             //attribute inside a complex one
+            return true;
+        qDebug() << "didn't find";
+    }
+    return false;
+}
+
+Attribute *Entity::getPrimaryKey() const
+{
+    return this->primaryKey;
+}
+
+bool Entity::setPrimaryKey(Attribute *pk)
+{
+    if(pk->canBePK() && !isChild(pk) && !compoundSecondary.contains(pk)){
+        this->removeAttribute(pk->getName());
+        if(this->primaryKey!=NULL){
+            Attribute *tmp = this->primaryKey;
+            this->primaryKey = pk;
+            pk->setSecondaryKey(false); //in case it was SK
+            tmp->setPrimaryKey(false);
+            this->addAttribute(tmp, QString(""), error);
+        }
+        else this->primaryKey = pk;
+        pk->setPrimaryKey(true);
+        return true;
+    }
+    else return false;
+}
+
+bool Entity::setSecondaryKey(Attribute *sk)
+{
+    if(sk!=primaryKey){
+        if(!isChild(sk)){
+            this->removeAttribute(sk->getName());
+            secondaryKeys.append(sk);
+            sk->setSecondaryKey(true);
+            return true;
+        }
+        else{
+            error->setError(Error::SecondaryChild);
+            return false;
+        }
+    }
+    else {
+        error->setError(Error::PrimarySecondary);
+        return false;
+    }
+}
+
+bool Entity::setSecondaryKeyComp(QList<Attribute *> atts)
+{
+    if(!atts.isEmpty()){
+        foreach(Attribute *att, atts)
+            this->removeSecondaryKey(att->getName());
+        foreach(Attribute *att, atts){
+            if(!att->isChild())
+                this->removeAttribute(att->getName());
+        }
+        QString name("altKey"+QString::number(altKey));
+        Attribute *aux = new AttComp(name, false, atts.size(), false, false, true, false);
+        altKey++;
+        foreach(Attribute *att, atts)
+            aux->addAttribute(att, name);
+        this->setSecondaryKey(aux);
+        compoundSecondary.append(aux);
+        return true;
+    }
+    return false;
+}
+
+bool Entity::removeSecondaryKey(QString sk)
+{
+    foreach(Attribute *att, secondaryKeys){
+        if(att->getName() == sk){
+            att->setSecondaryKey(false);
+            secondaryKeys.removeOne(att);
+            if(compoundSecondary.contains(att)){
+                QList<Attribute *> tmp = ((AttComp*)att)->getAllAttributes();
+                foreach(Attribute *a, tmp){
+                    if(!a->isChild())
+                        this->addAttribute(a, QString(""), error);
+                }
+                compoundSecondary.removeAll(att);
+                altKey--;
+            }
+            else this->addAttribute(att, QString(""), error);
+            return true;
+        }
+    }
+    return false;
+}
+
+bool Entity::isChild(Attribute *attribute)
+{
+    QList<Attribute *> children;
+    if(primaryKey!=NULL)
+        children.append(primaryKey->getChildren());
+    foreach(Attribute *att, secondaryKeys)
+        children.append(att->getChildren());
+    foreach(Attribute *att, atts)
+        children.append(att->getChildren());
+    foreach(Attribute *att, children)
+        if(att->equals(attribute))
+            return true;
+    return false;
+}
+
+bool Entity::alreadyExists(QString name){
+    if(name.isEmpty())
+        return false;
+    if(primaryKey!=NULL && primaryKey->hasAttribute(name))
+        return true;
+    foreach(Attribute *att, secondaryKeys)
+        if(att->hasAttribute(name))
+            return true;
+    foreach(Attribute *att, atts)
+        if(att->hasAttribute(name))
+            return true;
+    return false;
+}
+
+bool Entity::addAttribute(Attribute *attribute, QString parent, Error *error)
+{
+    if(!alreadyExists(attribute->getName())){
+        if(parent.isEmpty()){
+            if(primaryKey!=NULL || !setPrimaryKey(attribute))
+                atts.push_back(attribute);
+        }
+        else{ //is complex attribute
+            if(this->primaryKey!=NULL && this->primaryKey->addAttribute(attribute, parent))
+                return true;
+            else{
+                foreach(Attribute *att, secondaryKeys){
+                    if(att->addAttribute(attribute, parent))
+                        return true;
+                }
+                foreach(Attribute *att, atts){
+                    if(att->addAttribute(attribute, parent))
+                        return true;
+                }
+                return false;
+            }
+        }
+        return true;
+    }
+    else{
+        error->setError(Error::NameTaken);
+        return false;
+    }
+}
+
+bool Entity::removeAttribute(QString attributesName)
+{
+    if(this->primaryKey!=NULL){
+        if(this->primaryKey->getName() == attributesName){
+            this->primaryKey = NULL;
+            return true;
+        }
+        else if(primaryKey->removeAttribute(attributesName))
+            return true;
+    }
+    foreach(Attribute *att, secondaryKeys){
+        if(att->getName() == attributesName){
+            secondaryKeys.removeOne(att);
+            return true;
+        }
+        else if(att->removeAttribute(attributesName))
+            return true;
+    }
+    foreach(Attribute *att, atts){
+        if(att->getName() == attributesName){
+            atts.removeOne(att);
+            return true;
+        }
+        else if(att->removeAttribute(attributesName))
+            return true;
+    }
+    return false;
+}
+
+QList<Attribute *> Entity::getAllAttributes()
+{
+    QList<Attribute*> tmp;
+    if(primaryKey!=NULL)
+        tmp.append(primaryKey->getAttributes());
+    foreach(Attribute* att, secondaryKeys)
+        tmp.append(att->getAttributes());
+    foreach(Attribute* att, atts)
+        tmp.append(att->getAttributes());
+    return tmp;
+}
+
+QList<Attribute *> Entity::getAttributes()
+{
+    QList<Attribute*> tmp;
+    if(primaryKey!=NULL)
+        tmp.append(primaryKey);
+    tmp.append(secondaryKeys);
+    tmp.append(atts);
+    return tmp;
+}
+
+QList<QString> Entity::getSKToSave()
+{
+    QList<Attribute*> tmp;
+    QList<QString> aux;
+    foreach(Attribute *att, compoundSecondary)
+        tmp.append(((AttComp *)att)->getAllAttributes());
+    foreach(Attribute *att, tmp)
+            aux.append(att->getName());
+    return aux;
+}
+
+void Entity::addCompSK(QString name)
+{
+    foreach(Attribute *att, this->getAllAttributes())
+        if(att->getName() == name)
+            partialSK.append(att);
+}
+
+void Entity::generateCompSK()
+{
+    this->setSecondaryKeyComp(partialSK);
+}
+
+QList<Attribute *> Entity::getAttributesToSave()
+{
+    QList<Attribute*> tmp = this->getAttributes(), aux;
+    foreach(Attribute *att, compoundSecondary)
+        tmp.removeAll(att);
+    foreach(Attribute *att, compoundSecondary)
+        aux.append(((AttComp *)att)->getAllAttributes());
+    foreach(Attribute *att, aux)
+        if(!att->isChild())
+            tmp.append(att);
+    return tmp;
+}
+
+QList<Attribute *> Entity::getSecondaryKeys()
+{
+    return this->secondaryKeys;
+}
+
+Entity *Entity::getCopy()
+{
+    Entity *tmp = new Entity(this->name, this->error);
+    if(primaryKey!=NULL){
+        Attribute *aux = primaryKey->getCopy();
+        tmp->addAttribute(aux, "", this->error);
+        tmp->setPrimaryKey(aux);
+    }
+    foreach(Attribute* att, secondaryKeys){
+        Attribute *aux = att->getCopy();
+        tmp->addAttribute(aux, "", this->error);
+        tmp->setSecondaryKey(aux);
+    }
+    foreach(Attribute* att, atts)
+        tmp->addAttribute(att->getCopy(), "", this->error);
+    return tmp;
+}
+

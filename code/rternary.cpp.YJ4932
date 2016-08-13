@@ -1,0 +1,261 @@
+#include "rternary.h"
+
+RTernary::RTernary(QString nameRship, Error *error, QList<Entity *> ents, QList<Cardinality *> cards):
+    Relationship(nameRship,error,ents,cards)
+{
+}
+
+Relationship *RTernary::getCopy()
+{
+    QList<Entity*> newEnts;
+    newEnts.append(entities);
+    QList<Cardinality*> newCards;
+    foreach(Cardinality * c, cards){
+        Cardinality * newCard = new Cardinality(c->getMin(), c->getMax());
+        newCards.append(newCard);
+    }
+
+    RTernary * item = new RTernary(name,error,newEnts,newCards);
+    foreach(Attribute * att, atts){
+        Attribute * attC = att->getCopy();
+        item->addAttribute(attC,QString(),error);
+    }
+    item->setRolename(roleName);
+    return item;
+}
+
+QString RTernary::getSQL()
+{
+    QString tmp, final;
+    QList<QString> tables, types, constraints;
+
+    tmp.append("CREATE TABLE "+this->getName()+"\n(\n");
+    QList<QString> pks = getPKs(false);
+    QString pk;
+    if (pks.size() > 0) pk = pks.at(0);
+    foreach(Entity * ent, entities)
+        ent->getPrimaryKey()->addToSQL(tmp, this->getName(), tables, types, constraints, ent->getPrimaryKey(), NULL);
+    types.clear();  //otherwise, types already declared in entities are repeated
+
+    AttSimple * pkAtt = new AttSimple(pk,false,false,true,false,false);
+    foreach(Attribute *att, atts)
+        att->addToSQL(tmp, this->getName(), tables, types, constraints, pkAtt, NULL);
+    foreach(QString a, constraints)
+        tmp.append(a);
+
+    tmp.append("\n\tCONSTRAINT PK_"+this->getName()+" PRIMARY KEY ("+pk+")");
+    if (!pks.isEmpty()) pks.pop_front();
+    foreach(QString p, pks)
+        tmp.append("\n\tCONSTRAINT AK"+QString::number(pks.indexOf(p))+"_"+getName()+" UNIQUE ("+p+")");
+    foreach(Entity * e, entities)
+        tmp.append("\n\tCONSTRAINT FK_"+e->getName()+" FOREIGN KEY ("+joinPK(e,false)+
+                   ") REFERENCES "+e->getName()+"("+joinPK(e,false)+")"
+                   +" MATCH " + getOption(e,getMatch()).toLower()
+                   +" ON DELETE " + getOption(e,getOnDelete()).toLower()
+                   +" ON UPDATE " + getOption(e,getOnUpdate()).toLower()
+                   );
+    tmp.append("\n);");
+
+    foreach(QString s, types)
+        final.append(s+"\n\n");
+    final.append(tmp+"\n\n");
+    foreach(QString s, tables)
+        final.append(s+"\n\n");
+    return final;
+}
+
+QString RTernary::getDerivation()
+{
+    QString result;
+    QList<QString> pks = getPKs(true);
+
+    //name + PK
+    if (pks.size()==1)      //N:N:N or N:N:1
+        if (cards.at(0)->getMax()!="1" && cards.at(1)->getMax()!="1" && cards.at(2)->getMax()!="1") //N:N:N
+            result = "NNN_";
+        else result = "NN1_";
+    else{
+        if (cards.at(0)->getMax()=="1" && cards.at(1)->getMax()=="1" && cards.at(2)->getMax()=="1") //1:1:1
+            result = "111_";
+        else
+            if (pks.size()==0) return QString("");
+            else result = "N11_";
+    }
+    result += getName() + "[" + pks.at(0) + ";";
+    pks.pop_front();
+
+    //AKs
+    foreach(QString ak, pks){
+        result+=ak+",";
+    } if (pks.size() > 0) result.chop(1);
+    result+=";";
+
+    //Attributes
+    QList<Attribute*> deriveAtts[4];
+    foreach(Attribute * att,this->atts){
+        att->getDeriveList(deriveAtts);
+    }
+    for (int i = Entity::secondaryKey + 1 ; i <= Entity::multAtts; i++){
+        QString s;
+        QList<Attribute*> a = deriveAtts[i];
+        if(a.size()!=0){
+            QList<Attribute*>::iterator it;
+            for(it = a.begin() ; it!= a.end() ; it++)
+                s+=(*it)->derive()+",";
+            s.chop(1); //erase last comma
+            result.append(s);
+        }
+        result.append(";");
+    }
+
+    //Cardinalitites
+    if ((cards.at(0)->getMax()!="1" && cards.at(1)->getMax()!="1" && cards.at(2)->getMax()!="1")        //N:N:N
+           || (cards.at(0)->getMax()=="1" && cards.at(1)->getMax()=="1" && cards.at(2)->getMax()=="1"))   //1:1:1
+        result+="(" + QString::number(cards.at(0)->getMin()) + "," +cards.at(0)->getMax() + ")," +
+                "(" + QString::number(cards.at(1)->getMin()) + "," +cards.at(1)->getMax() + ")," +
+                "(" + QString::number(cards.at(2)->getMin()) + "," +cards.at(2)->getMax() + ");";
+    else{                   //N:N:1 or N:1:1, cardinalities must be according to the PK selected
+        int ent1=-1;
+        int entN=-1;
+        for (int i = 0; i < cards.size(); i++)      //see if it's a N:N:1
+            if (cards[i]->getMax()=="1"){
+                if (ent1==-1) ent1 = i;
+                else ent1 = -1;}
+        if (ent1>=0) qDebug() << "its N:N:1=" << ent1;
+        if (ent1 <0){    //it's an N:1:1
+            for (int i = 0; i < cards.size(); i++)
+                if (cards[i]->getMax()!="1")
+                    entN = i;
+            qDebug() << "its N:1:1=" << entN;
+        }
+
+        int n1, n2;
+        qDebug() << "switch:" << (ent1<0)?entN:ent1;
+        switch((ent1<0)?entN:ent1){
+        case 0:
+            (n1,n2) = (1,2); break;
+        case 1:
+            (n1,n2) = (0,2); break;
+        case 2:
+            (n1,n2) = (0,1); break;
+        }
+        qDebug() << n1 << "-" << n2;
+
+        QString parcCard = "(" + QString::number(cards.at(n1)->getMin()) + "," +cards.at(n1)->getMax() + ")," +
+                "(" + QString::number(cards.at(n2)->getMin()) + "," +cards.at(n2)->getMax() + ")";
+
+        if (ent1<0)
+            result+= "(" + QString::number(cards.at(entN)->getMin()) + "," +cards.at(entN)->getMax() + ")," + parcCard + ";";
+        else result+= parcCard + "," + "(" + QString::number(cards.at(ent1)->getMin()) + "," +cards.at(ent1)->getMax() + ");";
+    }
+
+    //FKs
+    result+= entities.at(0)->getName() + "." + entities.at(0)->getPrimaryKey()->derive()
+            + "," + entities.at(1)->getName() + "." + entities.at(1)->getPrimaryKey()->derive()
+            + "," + entities.at(2)->getName() + "." + entities.at(2)->getPrimaryKey()->derive() + "]";
+
+    return result;
+}
+
+void RTernary::addToTableSQL(QTableWidget *table)
+{
+    for(int i = 0; i < entities.size(); i++){
+        Entity * ent = entities.at(i);
+        QString aux;
+        foreach(QString p, ent->getPrimaryKey()->getSQLName())
+            aux+=p+",";
+        aux.chop(1);
+
+        QTableWidgetItem * a = new QTableWidgetItem(aux);
+        table->insertRow(table->rowCount());
+        table->setItem(table->rowCount()-1,0,a);
+
+        QList<QString> items;
+        items << "Restrict" << "Cascade" << "No action";
+        if (cards.size() == entities.size() && cards.at(i)->getMin()==0)
+            items << "Set null";
+        FKComboBox * cbOnDelete = new FKComboBox(table,onDelete.at(i));
+        cbOnDelete->addOptions(items);
+        table->setCellWidget(table->rowCount()-1,1,cbOnDelete);
+
+        FKComboBox * cbOnUpdate = new FKComboBox(table,onUpdate.at(i));
+        cbOnUpdate->addOptions(items);
+        table->setCellWidget(table->rowCount()-1,2,cbOnUpdate);
+        items.clear();
+        items << "Simple" << "Partial" << "Full";
+        FKComboBox * cbMatching = new FKComboBox(table,matching.at(i));
+        cbMatching->addOptions(items);
+        table->setCellWidget(table->rowCount()-1,3,cbMatching);
+    }
+}
+
+QList<Relationship *> RTernary::getFKs()
+{
+    QList<Relationship*> result;
+    result << this;
+    return result;
+}
+
+QDomElement *RTernary::getXML(QDomDocument *document)
+{
+    return Relationship::getXML(document,"RTernary");
+}
+
+QList<QString> RTernary::getPKs(bool derivELE)
+{
+    QList<QString> pks;
+    if (cards.size()==3){
+        QString max1 = cards.at(0)->getMax();
+        QString max2 = cards.at(1)->getMax();
+        QString max3 = cards.at(2)->getMax();
+
+        if (max1!="1" && max2!="1" && max3!="1")        //N:N:N
+            pks << joinPK(entities.at(0),derivELE)+","+joinPK(entities.at(1),derivELE)+","+joinPK(entities.at(2),derivELE);
+        else{
+            if (max1=="1" && max2=="1" && max3=="1"){    //1:1:1
+                pks << joinPK(entities.at(0),derivELE)+","+joinPK(entities.at(1),derivELE);
+                pks << joinPK(entities.at(0),derivELE)+","+joinPK(entities.at(2),derivELE);
+                pks << joinPK(entities.at(1),derivELE)+","+joinPK(entities.at(2),derivELE);
+            }
+            else{
+                Entity *e1, *e1p, *eN, *eNp;
+                if ((max1=="1" && max2=="1") || (max2=="1" && max3=="1") || (max1=="1"&&max3=="1")){    //1:1:N
+                    e1 = (max1=="1")?entities.at(0):entities.at(1);
+                    e1p = (max3=="1")?entities.at(2):entities.at(1);
+                    eN = (max1!="1")?entities.at(0):entities.at(1);
+                    eNp = NULL;
+                    if (eN==entities.at(1)) eN = (max2!="1")?entities.at(1):entities.at(2);
+                }
+                else{                                //1:N:N
+                    e1 = (max1=="1")?entities.at(0):entities.at(1);
+                    if (e1==entities.at(1)) e1 = (max3=="1")?entities.at(1):entities.at(2);
+                    eN = (max1!="1")?entities.at(0):entities.at(1);
+                    eNp = (max3!="1")?entities.at(2):entities.at(1);
+                }
+
+                if (eN!=NULL && eNp!=NULL)         //1:N:N
+                    pks << joinPK(eN,derivELE) + "," + joinPK(eNp,derivELE);
+                else{                               //1:1:N
+                    if (e1!=NULL && e1p!=NULL){
+                        pks << joinPK(eN,derivELE) + "," + joinPK(e1,derivELE);
+                        pks << joinPK(eN,derivELE) + "," + joinPK(e1p,derivELE);
+                    }
+                }
+            }
+        }
+    }
+    return pks;
+}
+
+QString RTernary::joinPK(Entity *ent, bool derivELE)
+{
+    if (derivELE)
+        return QString(ent->getName() + "." + ent->getPrimaryKey()->derive());
+
+    QString aux;
+    foreach(QString s, ent->getPrimaryKey()->getSQLName())
+        aux+=s+",";
+    aux.chop(1);
+    return aux;
+}
+

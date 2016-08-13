@@ -1,0 +1,32 @@
+<RCC>
+    <qresource prefix="/img">
+        <file>Clean.ico</file>
+        <file>Cute.png</file>
+        <file>Help.ico</file>
+        <file>images.qrc</file>
+        <file>Information.png</file>
+        <file>NewRelationship.png</file>
+        <file>Open.ico</file>
+        <file>Plus.png</file>
+        <file>Quit.ico</file>
+        <file>Save.ico</file>
+        <file>Suggestion.ico</file>
+        <file>Minus.png</file>
+        <file>Trash.png</file>
+        <file>NewEntity.png</file>
+        <file>NewTab.png</file>
+        <file>Tools.png</file>
+        <file>Derive.png</file>
+        <file>Pk.png</file>
+        <file>SQL.png</file>
+        <file>Appicon.png</file>
+        <file>Background.png</file>
+        <file>Sk.png</file>
+        <file>Down.png</file>
+        <file>Up.png</file>
+        <file>rhombus-icon.png</file>
+    </qresource>
+    <qresource prefix="/">
+        <file>hierarchy.png</file>
+    </qresource>
+</RCC>

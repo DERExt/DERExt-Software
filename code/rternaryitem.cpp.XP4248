@@ -1,0 +1,215 @@
+#include "rternaryitem.h"
+#define MIN(a, b) ((a < b) ? a : b)
+#define MAX(a, b) ((a > b) ? a : b)
+
+RTernaryItem::RTernaryItem(QString name, GraphicView *graphicsView, QDomElement *elem, Error *error, QWidget *parent,
+                           QList<EntityItem *> ents, QList<Cardinality *> cards):
+    RelationshipItem(name,graphicsView,error,parent)
+{
+    if (ents.size() == expectedArity && cards.size() == expectedArity){
+        this->entities << ents;
+        ents.at(0)->addRelationship(this);
+        ents.at(1)->addRelationship(this);
+        ents.at(2)->addRelationship(this);
+        adjust();
+
+        QList<Entity*> entityList;
+        entityList << ents.at(0)->getEntity() << ents.at(1)->getEntity() << ents.at(2)->getEntity();
+        this->rship = new RTernary(name,error,entityList,cards);
+        load(elem);
+    }
+}
+
+void RTernaryItem::adjust()
+{
+    if (entities.size() != expectedArity)
+        return;
+
+    QLineF line(rectangleCenter(entities.at(0)), rectangleCenter(entities.at(1)));
+    qreal length = line.length();
+
+    prepareGeometryChange();
+
+    QPointF edgeOffset((line.dx() * 10) / length, (line.dy() * 10) / length);
+
+    e1Point = line.p1() + edgeOffset;
+    e2Point = line.p2() - edgeOffset;
+    e3Point = rectangleCenter(entities.at(2));
+    center = (line.p1()+line.p2())/2;
+}
+
+IGraphicItem *RTernaryItem::getCopy()
+{
+    QList<Cardinality*> card;
+    foreach(Cardinality * c, rship->getCardinalities()){
+        Cardinality * newCard = new Cardinality(c->getMin(), c->getMax());
+        card.append(newCard);
+    }
+    RTernaryItem * item;
+    if (card.size() == expectedArity && entities.size() == expectedArity){
+        QList<EntityItem*> entitiesCopy;
+        entitiesCopy << (EntityItem*)entities.at(0)->getCopy() << (EntityItem*)entities.at(1)->getCopy()
+                    << (EntityItem*)entities.at(2)->getCopy();
+        item = new RTernaryItem(rship->getName(),graphicView,NULL,error,parent, entitiesCopy, card);
+        item->setRelationship(rship->getCopy());
+        item->setCenter(center);
+    }
+    return item;
+}
+
+QString RTernaryItem::getDerivation()
+{
+    /**
+      TO DO
+      **/
+    return QString();
+}
+
+void RTernaryItem::getXML(QDomDocument *document, QDomElement *root)
+{
+    QDomElement * tmp = new QDomElement(document->createElement("RTernary"));
+    tmp->setAttribute("name", this->getName());
+    tmp->setAttribute("x",center.x());
+    tmp->setAttribute("y",center.y());
+
+    QList<Cardinality *> cards = rship->getCardinalities();
+
+    if (cards.size() == expectedArity){
+        tmp->setAttribute("name1",this->entities.at(0)->getName());
+        tmp->setAttribute("min1",cards.at(0)->getMin());
+        tmp->setAttribute("max1",cards.at(0)->getMax());
+        tmp->setAttribute("name2",this->entities.at(1)->getName());
+        tmp->setAttribute("min2",cards.at(1)->getMin());
+        tmp->setAttribute("max2",cards.at(1)->getMax());
+        tmp->setAttribute("name3",this->entities.at(2)->getName());
+        tmp->setAttribute("min3",cards.at(2)->getMin());
+        tmp->setAttribute("max3",cards.at(2)->getMax());
+    }
+
+    foreach(Attribute * att, this->rship->getAttributesToSave()){
+        /**
+          Revisar en caso de aceptar atributos compuestos en relacion.
+          El metodo es diferente en Entidad que en Relacion.
+          **/
+        att->addToXML(document,tmp,QString(""));
+    }
+    root->appendChild(*tmp);
+}
+
+void RTernaryItem::load(QDomElement * e)
+{
+    /**
+      Mismo codigo de EntityItem y RUnary y RBinary menos Entity que le carga las claves
+      **/
+    if(e != NULL){
+            QDomNodeList nodes = e->childNodes();
+            for(int i=0 ; i<nodes.count() ; i++){
+                QDomNode node = nodes.at(i);
+                if(node.isElement()){
+                    QDomElement element = node.toElement();
+                    Attribute *newAtt;
+                    QString prnt = element.attribute("parent");
+                    bool bprnt = !prnt.isEmpty();
+                    if(element.tagName()=="Simple"){
+                        newAtt = new AttSimple(element.attribute("name"), element.attribute("null").toInt(), element.attribute("mult").toInt(), element.attribute("pk").toInt(), element.attribute("sk").toInt(), bprnt);
+                        ((AttSimple*)newAtt)->setType(element.attribute("type"), element.attribute("cant1").toInt(), element.attribute("cant2").toInt(), element.attribute("cant3").toInt());
+                    }
+                    else if (element.tagName()=="Compound")
+                        newAtt = new AttComp(element.attribute("name"), element.attribute("null").toInt(), element.attribute("amount").toInt(), element.attribute("mult").toInt(), element.attribute("pk").toInt(), element.attribute("sk").toInt(), bprnt);
+                    newAtt->setOptionSQL(element.attribute("optionSQL").toInt());
+                    this->addAttribute(newAtt, prnt);
+                    this->load(&element);
+                }
+            }
+    }
+}
+
+void RTernaryItem::setCenter(QPointF center)
+{
+    this->center = center;
+}
+
+QRectF RTernaryItem::boundingRect() const
+{
+    if (entities.size() != expectedArity)
+        return QRectF();
+
+    int minX = MIN(e1Point.x(),MIN(e2Point.x(),MIN(e3Point.x(),center.x())));                   //minimo de X
+    int maxX = MAX(e1Point.x(),MAX(e2Point.x(),MAX(e3Point.x(),center.x())));                   //max de X
+    int minY = MIN(e1Point.y(),MIN(e2Point.y(),MIN(e3Point.y(),center.y())));                   //minimo de Y
+    int maxY = MAX(e1Point.y(),MAX(e2Point.y(),MAX(e3Point.y(),center.y())));                   //max de Y
+
+    return QRectF(QPointF(minX-rhombusWidth,minY-rhombusHeigth),
+                  QPointF(maxX+rhombusWidth*2,maxY+rhombusHeigth*(rship->getAttributes().size()+1)));
+            //se agregan los offsets para considerar rombo y atributos
+}
+
+void RTernaryItem::paint(QPainter *painter, const QStyleOptionGraphicsItem *option, QWidget *widget)
+{
+    if (entities.size() != expectedArity)
+        return;
+
+    double centerX = center.x();
+    double centerY = center.y();
+    QPointF center(centerX,centerY);
+    QPointF x1(centerX - rhombusWidth , centerY);
+    QPointF x2(centerX + rhombusWidth , centerY);
+    QPointF y1(centerX , centerY - rhombusHeigth);
+    QPointF y2(centerX , centerY + rhombusHeigth);
+
+    //conexion
+    painter->setPen(QPen(Qt::black, 1, Qt::SolidLine, Qt::RoundCap, Qt::RoundJoin));
+    QLineF line(e1Point,center);
+    QLineF line2(e2Point,center);
+    painter->drawLine(line);
+    painter->drawLine(line2);
+    painter->drawLine(center,e3Point);
+
+    //atributos
+    int x = centerX + 30;
+    int y = centerY + 10;
+    foreach(Attribute * att, rship->getAttributes()){
+        QList<Attribute*> lastAtts = att->getChildren();
+        if(att->compare(rship->getAttributes().last()) && !lastAtts.isEmpty()){
+            att->addToScene(painter, x, y);
+            y+=15; //last is compound, so the vertical line shouldn't go to the children
+        }
+        else y = att->addToScene(painter, x, y);
+    }
+    if (!rship->getAttributes().isEmpty())
+        painter->drawLine(QPoint(x,centerY),QPoint(x,y-3));
+
+    //rombo
+    painter->setBrush(Qt::white);
+    painter->drawPolygon(QPolygonF() << x1 << y1 << x2 << y2);
+    painter->drawText(QRectF(QPointF(centerX-rhombusWidth/2,centerY-rhombusHeigth/2),
+                             QPointF(centerX+rhombusWidth/2,centerY+rhombusHeigth/2))
+                      , Qt::AlignCenter, rship->getName());
+
+    //cardinalidades
+    QList<Cardinality*> cards = rship->getCardinalities();
+    if (cards.size() == expectedArity){         //tamaño correcto que deberia tener en relacion binaria
+        QPointF center(centerX,centerY);
+
+        QPointF * inters = intersect(QRectF(e1Point-QPointF(entities.at(0)->getWidth()/2,entities.at(0)->getHeight()/2),
+                                            e1Point+QPointF(entities.at(0)->getWidth()/2,entities.at(0)->getHeight()/2)),line);
+        if (inters != NULL)
+            painter->drawText((*inters+center)/2 + QPointF(4,-4),cards.at(0)->getText());
+
+        inters = intersect(QRectF(e2Point-QPointF(entities.at(1)->getWidth()/2,entities.at(1)->getHeight()/2),
+                                    e2Point+QPointF(entities.at(1)->getWidth()/2,entities.at(1)->getHeight()/2)),line2);
+        if (inters != NULL)
+            painter->drawText((*inters+center)/2 + QPointF(4,-4),cards.at(1)->getText());
+
+        inters = intersect(QRectF(e3Point-QPointF(entities.at(2)->getWidth()/2,entities.at(2)->getHeight()/2),
+                                  e3Point+QPointF(entities.at(2)->getWidth()/2,entities.at(2)->getHeight()/2)),
+                           QLineF(center,e3Point));
+        if (inters != NULL)
+            painter->drawText((*inters+center)/2 + QPointF(4,-4),cards.at(2)->getText());
+    }
+}
+
+void RTernaryItem::mousePressEvent(QGraphicsSceneMouseEvent *event)
+{
+    QRectF rhombusRect()
+}
