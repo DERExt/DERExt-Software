@@ -14,6 +14,8 @@
 #include <QVBoxLayout>
 #include <QWidget>
 #include "hierarchyitem.h"
+#include <algorithm>
+
 namespace Ui {
 class HierarchyDialog;
 }
@@ -28,34 +30,30 @@ public:
     explicit HierarchyDialog(QList<QGraphicsItem *> items, QWidget *parent = 0);
     ~HierarchyDialog();
 
-    void setHerarchy(QString hrchyName);
 
+    bool isFatherValid(EntityItem *item);
+    bool isSonValid(EntityItem *item);
 private slots:
-    void on_rtypeComboBox_activated(const QString &arg1);
     void on_buttonBox_accepted();
     void on_buttonBox_rejected();
     void on_exclusiveBool_clicked(bool checked);
-    void on_HierarchyDialog_destroyed();
-    void on_checkBox_clicked();
     void on_pushAdd_clicked();
     void on_pushRemove_clicked();
     void on_modeComboBox_currentIndexChanged(int index);
     void on_sup_currentIndexChanged(int index);
     void on_lineEdit_editingFinished();
 
-    bool existsSupertype();
 private:
     Ui::HierarchyDialog *ui;
     QList<QGraphicsItem*> sceneItems;
     QList<QGraphicsItem*> backup;
-    QList<QVBoxLayout*> entitiesUi;
     Error *error;
     EntityItem *auxModify;
 
-
     HierarchyItem *createHierarchy();
     HierarchyItem *getHierarchy();
-protected:
+
+    void removeHierarchy(QList<EntityItem*> list);
 
 };
 

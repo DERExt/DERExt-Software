@@ -31,7 +31,7 @@ void MainWindow::about()
 {
     QMessageBox *dialog = new QMessageBox(this);
     dialog->setIcon(QMessageBox::Information);
-    dialog->setText("Application created by Kevin Ruau and Daniel Fujii.\nFinal project for Data Storage Structures and Data Bases I, UNICEN 2016.");
+    dialog->setText("Application created by Kevin Ruau, Daniel Fujii and Herminio Andrés Hernández.\nFinal project for Data Storage Structures and Data Bases I, UNICEN 2016.");
     dialog->exec();
     ui->menuAbout->clearFocus();
 }
@@ -300,6 +300,100 @@ void MainWindow::addN1Rship(Relationship *rship)
     }
 }
 
+void MainWindow::loadEntities(QList<QGraphicsItem*> & items) {
+    IGraphicItem * it;
+    for(int i=0; i < this->aggregations.size(); i++) {
+        QDomElement element = this->aggregations.at(i);
+        RelationshipItem * r;
+        foreach(QGraphicsItem * item, items){
+            if( ((IGraphicItem*)item)->getName() == element.attribute("associationRel")) {
+                r = ((RelationshipItem*)item);
+            }
+        }
+        r->setPartOfAssociation();
+        it = new EntityItem(element.attribute("name"), &element, NULL, this->error, this, element.attribute("subtype").toInt(), false, false, NULL, true, r);
+        items << it;
+    }
+    this->aggregations.clear();
+}
+
+void MainWindow::loadRelationships(QList<QGraphicsItem*> & items, QList<QDomElement> weakEntities) {
+    IGraphicItem * item;
+
+    for(int i=0; i < this->nonReadyRelationships.size(); i++) {
+        item = NULL;
+        QDomElement element = this->nonReadyRelationships.at(i);
+
+        //RELACIONES.
+
+        //cargar entidades debiles luego de las regulares, pero antes de las relaciones
+        while (!weakEntities.empty()){
+            QDomElement elem = weakEntities.front();
+            EntityItem* strongEnt = (EntityItem*)getItem(items,elem.attribute("strongEnt"));
+            if (strongEnt != NULL){      //la entidad de la que depende ya fue cargada
+                loadItem(elem, items, weakEntities,false);
+                weakEntities.pop_front();
+            }
+            else{   //quitar del principio y llevarlo al final para cargarlo luego
+                weakEntities.pop_front();
+                weakEntities.append(elem);
+            }
+        }
+//        weakEntities.clear();
+
+        bool oneEmpty = false;
+        int ent, card;
+        QList<QString> onDelete,onUpdate,matching;
+        QList<EntityItem*> ents;
+        QList<Cardinality*> cards;
+        ent = (element.tagName()=="RUnary")?1:2;
+        if (ent!=1) ent = (element.tagName()=="RTernary")?3:2;
+        card = (element.tagName()=="RTernary")?3:2;
+        for (int i = 0; i < ent; i++){
+            if((EntityItem*)getItem(items,element.attribute("name"+QString::number(i))) == NULL) {
+                oneEmpty = true;
+            }
+            else {
+                ents << (EntityItem*)getItem(items,element.attribute("name"+QString::number(i)));
+                onDelete << element.attribute("onDelete"+QString::number(i));
+                onUpdate << element.attribute("onUpdate"+QString::number(i));
+                matching << element.attribute("match"+QString::number(i));
+            }
+        }
+
+        if(oneEmpty) {
+            continue;
+        }
+
+        for (int j = 0; j < card; j++)
+            cards << new Cardinality(element.attribute("min"+QString::number(j)).toInt(),element.attribute("max"+QString::number(j)));
+        if (element.tagName()=="RUnary"){
+            item = new RUnaryItem(element.attribute("name"), NULL, &element, this->error, this, ents, cards);
+            ((Relationship*)item->getERItem())->setRolename(element.attribute("rolename"));
+        }
+        if (element.tagName()=="RBinary"){
+            if (element.attribute("dep").toInt() == true){
+                if (element.attribute("firstWeak").toInt() == true)
+                    item = new RBinaryItem(element.attribute("name"), NULL, &element, this->error,this, ents, cards,true,true);
+                else item = new RBinaryItem(element.attribute("name"), NULL, &element, this->error,this, ents, cards,true,false);
+            }
+            else {
+                item = new RBinaryItem(element.attribute("name"), NULL, &element, this->error,this, ents, cards);
+            }
+            ((Relationship*)item->getERItem())->setRolename(element.attribute("rolename"));
+        }
+        if (element.tagName()=="RTernary")
+            item = new RTernaryItem(element.attribute("name"), NULL, &element, this->error, this, ents,cards);
+        ((Relationship*)item->getERItem())->setOnDelete(onDelete);
+        ((Relationship*)item->getERItem())->setOnUpdate(onUpdate);
+        ((Relationship*)item->getERItem())->setMatch(matching);
+        item->setPosition(QPointF(element.attribute("x").toFloat(),element.attribute("y").toFloat()));
+        item->setZValue(-500.0);
+        items << item;
+    }
+    this->nonReadyRelationships.clear();
+}
+
 void MainWindow::on_openPButton_clicked()
 {
     QString filter = "DERExt (*.dere)";
@@ -336,29 +430,68 @@ void MainWindow::on_openPButton_clicked()
                         }
                     }
                 }
+
+
+                /**
+
+                  */
+
+                this->loadEntities(items);
+
+                this->loadRelationships(items, weakEntities);
+
+
                 foreach(QGraphicsItem * item, items){
                     subwindow->scene()->addItem(item);
                     ((IGraphicItem*)item)->setGraphicView(subwindow);
                 }
+
+
                 subwindow->setSaved(true);
+                subwindow->scene()->update();
             }
         }
         else error->setError(Error::InvalidFile);
     }
 }
 
+/**
+ * @brief MainWindow::loadItem
+ * @param element
+ * @param items
+ * @param weakEntities
+ * @param loadELE
+
+
+
+
+
+
+--------------------------------------------------------------------------------------------------
+
+*/
+
+
 void MainWindow::loadItem(QDomElement element, QList<QGraphicsItem*> & items,QList<QDomElement> & weakEntities, bool loadELE)
 {
     IGraphicItem * item;
     if(element.tagName()=="Entity"){
-        if (element.attribute("weak").toInt() == true){
-            item = new EntityItem(element.attribute("name"), &element, NULL, this->error, this,
-                                  true, (Entity*)((EntityItem*)getItem(items,element.attribute("strongEnt")))->getERItem());
-            item->setPos(element.attribute("x").toInt(), element.attribute("y").toInt());
+        //Si es una agregación necesito que se carguen las relaciones antes.
+        //Las pongo en una lista y las proceso luego.
+        if (element.attribute("isAssociative").toInt() == true) {
+            this->aggregations.append(element);
         }
-        else{
-            item = new EntityItem(element.attribute("name"), &element, NULL, this->error, this);
-            item->setPos(element.attribute("x").toInt(), element.attribute("y").toInt());
+        else {
+
+            if (element.attribute("weak").toInt() == true){
+                item = new EntityItem(element.attribute("name"), &element, NULL, this->error, this,element.attribute("subtype").toInt(),false,
+                                      true, (Entity*)((EntityItem*)getItem(items,element.attribute("strongEnt")))->getERItem());
+                item->setPos(element.attribute("x").toInt(), element.attribute("y").toInt());
+            }
+            else{
+                item = new EntityItem(element.attribute("name"), &element, NULL, this->error, this, element.attribute("subtype").toInt(), false);
+                item->setPos(element.attribute("x").toInt(), element.attribute("y").toInt());
+            }
         }
     }
     if (element.tagName()=="RUnary" || element.tagName()=="RBinary" || element.tagName()=="RTernary"){
@@ -386,7 +519,14 @@ void MainWindow::loadItem(QDomElement element, QList<QGraphicsItem*> & items,QLi
         card = (element.tagName()=="RTernary")?3:2;
 
         for (int i = 0; i < ent; i++){
-            ents << (EntityItem*)getItem(items,element.attribute("name"+QString::number(i)));
+            EntityItem * it= (EntityItem*)getItem(items,element.attribute("name"+QString::number(i)));
+            if(it == NULL) {
+                this->nonReadyRelationships << element;
+                return;
+            }
+            else
+                ents << (EntityItem*)getItem(items,element.attribute("name"+QString::number(i)));
+
             onDelete << element.attribute("onDelete"+QString::number(i));
             onUpdate << element.attribute("onUpdate"+QString::number(i));
             matching << element.attribute("match"+QString::number(i));
@@ -398,21 +538,29 @@ void MainWindow::loadItem(QDomElement element, QList<QGraphicsItem*> & items,QLi
             item = new RUnaryItem(element.attribute("name"), NULL, &element, this->error, this, ents, cards);
             ((Relationship*)item->getERItem())->setRolename(element.attribute("rolename"));
         }
+
         if (element.tagName()=="RBinary"){
             if (element.attribute("dep").toInt() == true){
                 if (element.attribute("firstWeak").toInt() == true)
                     item = new RBinaryItem(element.attribute("name"), NULL, &element, this->error,this, ents, cards,true,true);
-                else item = new RBinaryItem(element.attribute("name"), NULL, &element, this->error,this, ents, cards,true,false);
-            } else item = new RBinaryItem(element.attribute("name"), NULL, &element, this->error,this, ents, cards);
+                else
+                    item = new RBinaryItem(element.attribute("name"), NULL, &element, this->error,this, ents, cards,true,false);
+            }
+            else
+                item = new RBinaryItem(element.attribute("name"), NULL, &element, this->error,this, ents, cards);
+
             ((Relationship*)item->getERItem())->setRolename(element.attribute("rolename"));
         }
-        if (element.tagName()=="RTernary") item = new RTernaryItem(element.attribute("name"), NULL, &element, this->error, this, ents,cards);
+
+        if (element.tagName()=="RTernary")
+            item = new RTernaryItem(element.attribute("name"), NULL, &element, this->error, this, ents,cards);
 
         ((Relationship*)item->getERItem())->setOnDelete(onDelete);
         ((Relationship*)item->getERItem())->setOnUpdate(onUpdate);
         ((Relationship*)item->getERItem())->setMatch(matching);
         item->setPosition(QPointF(element.attribute("x").toFloat(),element.attribute("y").toFloat()));
         item->setZValue(-500.0);
+
         if (loadELE)
             addN1Rship((Relationship*)item->getERItem());
     }
@@ -420,8 +568,11 @@ void MainWindow::loadItem(QDomElement element, QList<QGraphicsItem*> & items,QLi
         QList<EntityItem*> ents;
 
         int ent = element.attribute("cont").toInt(nullptr, 10);
-        for (int i = 0; i < ent; i++)
-            ents << (EntityItem*)getItem(items,element.attribute("name"+QString::number(i)));
+        for (int i = 0; i < ent; i++) {
+            //OJO
+            if(!(EntityItem*)getItem(items,element.attribute("name"+QString::number(i))))
+                ents << (EntityItem*)getItem(items,element.attribute("name"+QString::number(i)));
+        }
         bool exc = false;
         bool tot = false;
         if(element.attribute("exclusive")=="true")
@@ -435,7 +586,9 @@ void MainWindow::loadItem(QDomElement element, QList<QGraphicsItem*> & items,QLi
 
 
     //more elements should be considered here
-    items << item;
+
+    if(element.attribute("isAssociative").toInt() == false)
+        items << item;
 }
 
 void MainWindow::on_exitPButton_clicked()
@@ -849,6 +1002,7 @@ void MainWindow::on_getSQLDerivationCommButton_clicked()
                             loadItem(element,loadedItems,weakEnts,true);
                         }
                     }
+
                     foreach(QGraphicsItem * item, loadedItems)
                         items << ((IGraphicItem*)item)->getERItem();
                     SQLDialog *dialog = new SQLDialog(items, this->error, this);
@@ -962,6 +1116,24 @@ void MainWindow::on_RelationshipCommButton_2_clicked()
             QList<QGraphicsItem*> items = scene->items();
             if (!items.empty()){
                 HierarchyDialog * dialog = new HierarchyDialog(items, this);
+                dialog->setModal(true);
+                dialog->show();
+            }
+            else error->setError(Error::NoItems);
+        }
+    }
+    else error->setError(Error::NoTab);
+}
+
+void MainWindow::on_associationButton_clicked()
+{
+    QMdiSubWindow* sub = ui->mdiArea->activeSubWindow();
+    if (sub!=0){
+        QGraphicsScene *scene = ((QGraphicsView*)(sub->widget()))->scene();
+        if (scene){
+            QList<QGraphicsItem*> items = scene->items();
+            if (!items.empty()){
+                associationdialog * dialog = new associationdialog(items, this);
                 dialog->setModal(true);
                 dialog->show();
             }

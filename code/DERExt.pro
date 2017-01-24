@@ -6,12 +6,11 @@
 
 QT       += core gui xml
 
+
 greaterThan(QT_MAJOR_VERSION, 4): QT += widgets
 
 TARGET = DERExt
 TEMPLATE = app
-
-CONFIG += c++11
 
 
 SOURCES += main.cpp\
@@ -42,7 +41,8 @@ SOURCES += main.cpp\
     cardinality.cpp \
     hierarchydialog.cpp \
     hierarchy.cpp \
-    hierarchyitem.cpp
+    hierarchyitem.cpp \
+    associationdialog.cpp
 
 HEADERS  += mainwindow.h \
     attribute.h \
@@ -76,7 +76,8 @@ HEADERS  += mainwindow.h \
     fkcombobox.h \
     hierarchydialog.h \
     hierarchy.h \
-    hierarchyitem.h
+    hierarchyitem.h \
+    associationdialog.h
 
 FORMS    += mainwindow.ui \
     attdialog.ui \
@@ -87,7 +88,10 @@ FORMS    += mainwindow.ui \
     editdialog.ui \
     relationshipdialog.ui \
     entitydialog.ui \
-    hierarchydialog.ui
+    hierarchydialog.ui \
+    associationdialog.ui
 
 RESOURCES += \
     images/images.qrc
+
+CONFIG  += c++11

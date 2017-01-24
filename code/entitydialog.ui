@@ -6,14 +6,24 @@
    <rect>
     <x>0</x>
     <y>0</y>
-    <width>301</width>
-    <height>144</height>
+    <width>298</width>
+    <height>162</height>
    </rect>
   </property>
   <property name="windowTitle">
    <string>Entity name</string>
   </property>
   <layout class="QGridLayout" name="gridLayout">
+   <item row="0" column="1" rowspan="2">
+    <widget class="QDialogButtonBox" name="buttonBox">
+     <property name="orientation">
+      <enum>Qt::Vertical</enum>
+     </property>
+     <property name="standardButtons">
+      <set>QDialogButtonBox::Cancel|QDialogButtonBox::Ok</set>
+     </property>
+    </widget>
+   </item>
    <item row="0" column="0">
     <layout class="QHBoxLayout" name="modeLayout">
      <item>
@@ -30,19 +40,13 @@
       </widget>
      </item>
      <item>
-      <widget class="QComboBox" name="modeComboBox"/>
+      <widget class="QComboBox" name="modeComboBox">
+       <property name="insertPolicy">
+        <enum>QComboBox::InsertAlphabetically</enum>
+       </property>
+      </widget>
      </item>
     </layout>
-   </item>
-   <item row="0" column="1" rowspan="2">
-    <widget class="QDialogButtonBox" name="buttonBox">
-     <property name="orientation">
-      <enum>Qt::Vertical</enum>
-     </property>
-     <property name="standardButtons">
-      <set>QDialogButtonBox::Cancel|QDialogButtonBox::Ok</set>
-     </property>
-    </widget>
    </item>
    <item row="1" column="0">
     <layout class="QVBoxLayout" name="lineEditLayout">
@@ -65,7 +69,7 @@
      </item>
     </layout>
    </item>
-   <item row="2" column="0">
+   <item row="3" column="0">
     <layout class="QVBoxLayout" name="comboBoxLayout">
      <item>
       <widget class="QCheckBox" name="checkBox">
@@ -75,7 +79,18 @@
       </widget>
      </item>
      <item>
-      <widget class="QComboBox" name="entitiesComboBox"/>
+      <widget class="QComboBox" name="entitiesComboBox">
+       <property name="insertPolicy">
+        <enum>QComboBox::InsertAlphabetically</enum>
+       </property>
+      </widget>
+     </item>
+     <item>
+      <widget class="QCheckBox" name="check_sub">
+       <property name="text">
+        <string>Subtype</string>
+       </property>
+      </widget>
      </item>
     </layout>
    </item>

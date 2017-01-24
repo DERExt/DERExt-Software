@@ -46,13 +46,15 @@ void Error::AnounceError()
         break;
     case WeakEntity: message = "Entity cannot be weak.";
         break;
-    case TypeHrchy: message = "Type name cannot be empty.";
+    case TypeHrchy: message = "Type name cannot be empty.";/**NEW**/
         break;
-    case NameSub: message = "Subtype name already used.";
+    case NameSub: message = "Subtype name already used.";/**NEW**/
         break;
-    case NoEntity: message = "Select at least two entities.";
+    case NoEntity: message = "Select at least two entities.";/**NEW**/
         break;
-    case EmptyTypeName: message = "Hierarchy type name cannot be empty.";
+    case EmptyTypeName: message = "Hierarchy type name cannot be empty.";/**NEW**/
+        break;
+    case PartHierarchy: message = "The entity is part of a hierarchy.";/**NEW**/
     }
 
     QMessageBox::critical(parent, "Error", message, QMessageBox::Ok, QMessageBox::Ok);

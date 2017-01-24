@@ -29,6 +29,16 @@ AttDialogEdit::AttDialogEdit(QList<QGraphicsItem*> listItems, QWidget *parent) :
             this->ui->itemComboBox->addItem(((IGraphicItem*)item)->getName());
         this->backup.append(((IGraphicItem*)item)->getCopy());
     }
+    foreach(QGraphicsItem* item, listItems){
+        if (item->type() == EntityItem::Type){
+            if(((EntityItem*)item)->getName() == ui->itemComboBox->currentText()){
+                if(((EntityItem*)item)->isSubtype())
+                    ui->primaryKeyPButton->setEnabled(false);
+                else
+                    ui->primaryKeyPButton->setEnabled(true);
+            }
+        }
+    }
     this->setWindowTitle("Edit Key");
 }
 
@@ -82,6 +92,7 @@ void AttDialogEdit::on_primaryKeyPButton_clicked()
     QList<QTableWidgetItem *> tmp = ui->tableWidget->selectedItems();
     if(!tmp.isEmpty()){
         Attribute *exPk = ent->getPrimaryKey();
+        ent->removeSecondaryKey(getAttribute(tmp.first()->row())->getName());
         if(ent->setPrimaryKey(getAttribute(tmp.first()->row())))
             changes = true;
         else error->setError(Error::InvalidPK);
@@ -157,6 +168,7 @@ void AttDialogEdit::on_itemComboBox_currentIndexChanged(const QString &itemName)
     ui->tableWidget->setHorizontalHeaderLabels(tableHeader);
     ui->tableWidget->setRowCount(0);
     this->setAttributes(item->getAllAttributes());
+
 }
 
 void AttDialogEdit::on_buttonBox_accepted()
@@ -173,4 +185,18 @@ void AttDialogEdit::on_buttonBox_rejected()
         main->addItem((IGraphicItem*)item);
     }
     this->close();
+}
+
+void AttDialogEdit::on_itemComboBox_currentIndexChanged(int index)
+{
+    foreach(QGraphicsItem* item, listItems){
+        if (item->type() == EntityItem::Type){
+            if(((EntityItem*)item)->getName() == ui->itemComboBox->currentText()){
+                if(((EntityItem*)item)->isSubtype())
+                    ui->primaryKeyPButton->setEnabled(false);
+                else
+                    ui->primaryKeyPButton->setEnabled(true);
+            }
+        }
+    }
 }

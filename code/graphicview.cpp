@@ -1,4 +1,5 @@
 #include "graphicview.h"
+#include "entityitem.h"
 #include <QDebug>
 
 GraphicView::GraphicView(QWidget *parent):QGraphicsView(parent){
@@ -47,6 +48,16 @@ void GraphicView::setSaved(bool saved)
     }
     this->setName();
 }
+
+/**
+ * @brief GraphicView::saveView
+ * @return
+
+
+------------------------------------------------------------------------------------
+
+*/
+
 
 bool GraphicView::saveView()
 {
@@ -247,7 +258,6 @@ void GraphicView::align(bool alignX, bool min) {
 
 
     foreach(QGraphicsItem * item, this->scene()->selectedItems()){
-        qDebug() << "SE ENCUENTRA EN (" << item->x() << "," << item->y() << ")";
         base = (alignX) ? item->y() : item->x();
         distance = (i == 0) ? base : this->getDistance(previousItem, item) / 2;
         newPosition = this->getNewComponent(alignX, min);
@@ -299,9 +309,6 @@ void GraphicView::alignTop(){
     }
 }
 
-
-
-
 void GraphicView::alignLeft(){
     QGraphicsItem * mostLeft = this->getMostLeftComponent(); //Inmovil
 
@@ -342,28 +349,27 @@ void GraphicView::alignRight(){
     }
 }
 
-void GraphicView::mouseReleaseEvent(QMouseEvent *event)
-{
+void GraphicView::mouseReleaseEvent(QMouseEvent *event) {
     QGraphicsView::mouseReleaseEvent(event);
     if (this->scene()->selectedItems().size() > 1){
         buildAlignMenu()->exec(event->screenPos().toPoint());
         foreach(QGraphicsItem * item, this->scene()->selectedItems())
-            item->setSelected(false);
+            if (((IGraphicItem*)item)->getType() == "Entity" && !((EntityItem*)item)->isAssociation)
+                item->setSelected(false);
     }
-    qDebug() << "SOLTÉ EL MOUSE";
 }
 
 void GraphicView::mousePressEvent(QMouseEvent *event)
 {
     foreach(QGraphicsItem * item, this->scene()->selectedItems())
-        item->setSelected(false);
+        if (((IGraphicItem*)item)->getType() == "Entity" && !((EntityItem*)item)->isAssociation)
+           item->setSelected(false);
     QGraphicsView::mousePressEvent(event);
 }
 
 void GraphicView::setName()
 {
-    if(!path.isEmpty())
-    {
+    if(!path.isEmpty()){
         QFileInfo *name = new QFileInfo(path);
         if(saved)
             setWindowTitle(name->fileName());

@@ -17,6 +17,7 @@
 #include "entitydialog.h"
 #include "rternaryitem.h"
 #include "hierarchydialog.h"
+#include "associationdialog.h"
 
 #include <QGraphicsView>
 #include <QMdiSubWindow>
@@ -69,6 +70,8 @@ private slots:
     void on_RelationshipCommButton_clicked();
 
     void on_RelationshipCommButton_2_clicked();
+    void on_associationButton_clicked();
+
 
 protected:
     void closeEvent(QCloseEvent *event);
@@ -79,7 +82,11 @@ private:
     Entity * getEnt(QList<Entity *> items, QString name, bool pk = 0);
     QGraphicsItem * getItem(QList<QGraphicsItem*> items, QString name);
     void addN1Rship(Relationship * rship);
+    void loadRelationships(QList<QGraphicsItem*> & items, QList<QDomElement> weakEntities);
+    void loadEntities(QList<QGraphicsItem*> & items);
 
+    QList<QDomElement> aggregations;
+    QList<QDomElement> nonReadyRelationships;
 private:
     Ui::MainWindow *ui;
     void loadItem(QDomElement element, QList<QGraphicsItem *> &items, QList<QDomElement> &weakEntities, bool loadELE=0);

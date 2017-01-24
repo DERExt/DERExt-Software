@@ -107,9 +107,38 @@ void RTernaryItem::paint(QPainter *painter, const QStyleOptionGraphicsItem*, QWi
     painter->setPen(QPen(Qt::black, 1, Qt::SolidLine, Qt::RoundCap, Qt::RoundJoin));
     QLineF line(points.at(0),center);
     QLineF line2(points.at(1),center);
+
+    foreach(EntityItem * item, this->getEntities()) {
+        QPointF * in = intersectRect(item->getRectangle(), line);
+        if (in != NULL) {
+            QPointF pInt(*in);
+            QLineF newLine(pInt, center);
+            line = newLine;
+        }
+    }
+
+    foreach(EntityItem * item, this->getEntities()) {
+        QPointF * in = intersectRect(item->getRectangle(), line2);
+        if (in != NULL) {
+            QPointF pInt(*in);
+            QLineF newLine(pInt, center);
+            line2 = newLine;
+        }
+    }
+
+    QLineF line3(center,points.at(2));
+    foreach(EntityItem * item, this->getEntities()) {
+        QPointF * in = intersectRect(item->getRectangle(), line3);
+        if (in != NULL) {
+            QPointF pInt(*in);
+            QLineF newLine(pInt, center);
+            line3 = newLine;
+        }
+    }
+
     painter->drawLine(line);
     painter->drawLine(line2);
-    painter->drawLine(center,points.at(2));
+    painter->drawLine(line3);
 
     //atributos
     int x = centerX + 30;
@@ -137,7 +166,7 @@ void RTernaryItem::paint(QPainter *painter, const QStyleOptionGraphicsItem*, QWi
     QList<QLineF> rhombusLines;
     rhombusLines << QLineF(x1,y1) << QLineF(y1,x2) << QLineF(x2,y2) << QLineF(y2,x1);
 
-    if (cards.size() == expectedArity){         //tamaño correcto que deberia tener en relacion binaria
+    if (cards.size() == expectedArity){         //tama?o correcto que deberia tener en relacion binaria
         QPointF center(centerX,centerY);
         QList<QLineF> lines;
         lines << line << line2 << QLineF(center,points.at(2));

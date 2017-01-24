@@ -13,7 +13,8 @@ AttDialog::AttDialog(QList<QGraphicsItem*> listItems, QWidget *parent) :QDialog(
     this->error = new Error(this);
     foreach(QGraphicsItem* item, listItems){
         if(((IGraphicItem*)item)->type() != HierarchyItem::Type)
-            this->ui->CBoxItems->addItem(((IGraphicItem*)item)->getName());
+            if(((IGraphicItem*)item)->type() == EntityItem::Type && !((EntityItem*)item)->isAssociation)
+                this->ui->CBoxItems->addItem(((IGraphicItem*)item)->getName());
         this->backup.append(((IGraphicItem*)item)->getCopy());
     }
     QStringList tableHeader;

@@ -2,27 +2,125 @@
 #include "weakentity.h"
 
 #include <QRectF>
+#include <QLineF>
 #include <QPen>
 #include <QPainter>
 #include <QGraphicsScene>
 
-
 #include <QDebug>
 
-EntityItem::EntityItem(QString entityName, QDomElement *element, GraphicView *graphicView, Error *error, QWidget *parent,
-                       bool weak, Entity * strongEnt)
+QRectF EntityItem::getRectangle() {
+
+    return (this->isAssociation)
+            ?   QRectF(
+                    QPointF(this->getMostLeftComponent()->x() - 10,this->getMostTopComponent()->y() - 10),
+                    QPointF(this->getMostRightComponent()->x() + 10, this->getMostBottomComponent()->y() + 10)
+                )
+            :   QRectF(
+                    QPointF(scenePos()),
+                    QPointF(scenePos()+QPointF(width,height))
+                );
+}
+
+void EntityItem::setBounds(QString entityName) {
+    if (! this->isAssociation) {
+        this->width = entityName.count()*charWidth + 20;
+        this->height = 40;
+    }
+}
+
+void EntityItem::printElements() {
+    for (EntityItem * item : this->aggregationRel->getEntities()) {
+        qDebug() << item->pos();
+    }
+}
+
+QPointF * EntityItem::getMostLeftComponent() {
+    int left = INT_MAX; //Máximo de la pantalla para comenzar el greedy.
+    QGraphicsItem * mostLeftItem;
+    foreach(QGraphicsItem * item, this->aggregationRel->getEntities()){
+        if(item->x() < left) {
+            mostLeftItem = item;
+            left = item->x();
+        }
+    }
+    QPointF * point = new QPointF(mostLeftItem->pos());
+    return point;
+}
+
+QPointF * EntityItem::getMostRightComponent() {
+    int right = INT_MIN;
+    QGraphicsItem * mostRightItem;
+    foreach(QGraphicsItem * item, this->aggregationRel->getEntities()){
+        if(item->x() > right) {
+            mostRightItem = item;
+            right = item->x();
+        }
+    }
+    QPointF * point = new QPointF(mostRightItem->pos().x() + mostRightItem->boundingRect().width(), mostRightItem->pos().y());
+    return point;
+}
+
+
+/**
+ * ELE EJE y ESTÁ INVERTIDO.
+ */
+
+QPointF * EntityItem::getMostTopComponent() {
+    int top = INT_MAX;
+    QGraphicsItem * mostTopItem;
+    foreach(QGraphicsItem * item, this->aggregationRel->getEntities()){
+        if(item->y() < top) {
+            mostTopItem = item;
+            top = item->y();
+        }
+    }
+    QPointF * point = new QPointF(mostTopItem->pos());
+    return point;
+}
+
+QPointF * EntityItem::getMostBottomComponent() {
+    int bottom = INT_MIN;
+    QGraphicsItem * mostBottomItem;
+    foreach(QGraphicsItem * item, this->aggregationRel->getEntities()){
+        if(item->y() > bottom) {
+            mostBottomItem = item;
+            bottom = item->y();
+        }
+    }
+    QPointF * point = new QPointF(mostBottomItem->pos().x(), mostBottomItem->pos().y() + mostBottomItem->boundingRect().height());
+    return point;
+}
+
+EntityItem::EntityItem(QString entityName, QDomElement *element, GraphicView *graphicView, Error *error, QWidget *parent, bool sub,
+                       bool old, bool weak, Entity * strongEnt, bool isAssociation, RelationshipItem * rel)
 {
-    this->width = entityName.count()*charWidth + 20;
-    this->height = 40;
+    this->isAssociation = isAssociation;
+    this->aggregationRel = rel;
+
+    //DIBUJAR LA ASOCIACIÓN O LA ENTIDAD [OTRA FUNCIÓN].
+    this->setBounds(entityName);
     this->graphicView = graphicView;
     this->error = error;
     this->parent = parent;
     this->isWeak = weak;
     this->isMoving = false;
+    this->old = old;
     if (isWeak)
         this->ent = new WeakEntity(entityName, this->error, strongEnt);
-    else
-        this->ent = new Entity(entityName, this->error);
+    else {
+        if(!isAssociation) {
+            this->ent = new Entity(entityName, this->error);
+        }
+        else {
+            this->ent = new Entity(entityName, this->error, isAssociation, (Relationship*)rel->getERItem());
+            this->ent->setAssociation(rel->getRship());
+        }
+    }
+    ent->setSubtype(sub);
+    ent->setOldState(old);
+    this->subtype = false;
+    this->subtype = sub;
     this->setFlag(ItemIsMovable, true);
     this->setFlag(ItemSendsGeometryChanges,true);
     this->setFlag(ItemIsSelectable,true);
@@ -30,8 +128,11 @@ EntityItem::EntityItem(QString entityName, QDomElement *element, GraphicView *gr
     this->ent->generateCompSK();
     if(graphicView)
         this->graphicView->setSaved(true);
-    this->setPosition();
-
+    if(!isAssociation)
+        this->setPosition();
+    else
+        rel->setPartOfAssociation();
+        //this->setPosition(QPointF(this->getMostLeftComponent()->x() - 10, this->getMostTopComponent()->y() - 10));
 }
 
 void EntityItem::loadNode(QDomElement *e)
@@ -44,9 +145,10 @@ void EntityItem::loadNode(QDomElement *e)
                 QDomElement element = node.toElement();
                 Attribute *newAtt;
                 QString prnt = element.attribute("parent");
+
                 bool bprnt = !prnt.isEmpty();
                 if(element.tagName()=="Simple"){
-                    newAtt = new AttSimple(element.attribute("name"), element.attribute("null").toInt(), element.attribute("mult").toInt(), element.attribute("pk").toInt(), element.attribute("sk").toInt(), bprnt);
+/*//////////*/       newAtt = new AttSimple(element.attribute("name"), element.attribute("null").toInt(), element.attribute("mult").toInt(), element.attribute("pk").toInt(), element.attribute("sk").toInt(), bprnt);
                     ((AttSimple*)newAtt)->setType(element.attribute("type"), element.attribute("cant1").toInt(), element.attribute("cant2").toInt(), element.attribute("cant3").toInt());
                 }
                 else if (element.tagName()=="Compound")
@@ -94,6 +196,11 @@ void EntityItem::setName(QString name)
     this->width = name.count()*charWidth + 20;
 }
 
+void EntityItem::setAssociation(RelationshipItem * rel)
+{
+    this->ent->setAssociation(rel->getRship());
+}
+
 QList<Attribute *> EntityItem::getAllAttributes()
 {
     return this->ent->getAllAttributes();
@@ -108,8 +215,14 @@ void EntityItem::getXML(QDomDocument *document, QDomElement *root)
 {
     QDomElement *tmp = ent->getXML(document);
 
-    tmp->setAttribute("x", this->pos().x());
-    tmp->setAttribute("y", this->pos().y());
+    if(this->isAssociation) {
+        tmp->setAttribute("x", this->getMostLeftComponent()->x() - 10);
+        tmp->setAttribute("y", this->getMostTopComponent()->y() - 10);
+    }
+    else {
+        tmp->setAttribute("x", this->pos().x());
+        tmp->setAttribute("y", this->pos().y());
+    }
 
     QList<QString> aux = ent->getSKToSave();
     foreach(QString s, aux){
@@ -123,6 +236,7 @@ void EntityItem::getXML(QDomDocument *document, QDomElement *root)
 
 void EntityItem::setPosition()
 {
+
     this->position = this->pos();
 }
 
@@ -136,9 +250,9 @@ IGraphicItem *EntityItem::getCopy()
 {
     EntityItem * tmp;
     if (isWeak)
-        tmp = new EntityItem(ent->getName(), NULL, this->graphicView, this->error, this->parent, isWeak,
-                                      ((WeakEntity*)ent)->getStrongEntity());
-    else tmp = new EntityItem(ent->getName(), NULL, this->graphicView, this->error, this->parent);
+        tmp = new EntityItem(ent->getName(), NULL, this->graphicView, this->error, this->parent, this->subtype, old,isWeak,
+                             ((WeakEntity*)ent)->getStrongEntity());
+    else tmp = new EntityItem(ent->getName(), NULL, this->graphicView, this->error, this->parent, this->subtype, old);
     tmp->setPosition(this->pos());
     tmp->setEntity(ent->getCopy());
     return tmp;
@@ -164,18 +278,15 @@ QPointF EntityItem::getPosition()
     return this->position;
 }
 
-void EntityItem::setFather(EntityItem *item)
+bool EntityItem::isSubtype()
 {
-    this->ent->setFather((Entity*)item->getERItem());
+    return ent->isSubtype();
 }
 
-Entity *EntityItem::getFather()
+void EntityItem::setSubtype(bool op)
 {
-    return this->ent->getFather();
-}
-
-void EntityItem::deleteFather(){
-    this->ent->deleteFather();
+    subtype = op;
+    ent->setSubtype(op);
 }
 
 void EntityItem::setGraphicView(GraphicView *view)
@@ -214,19 +325,9 @@ void EntityItem::addRelationship(RelationshipItem *item)
     rships.append(item);
 }
 
-void EntityItem::addHierarchy(HierarchyItem *item)
-{
-    hrchy.append(item);
-}
-
 void EntityItem::removeRelationship(RelationshipItem *item)
 {
     rships.removeAll(item);
-}
-
-void EntityItem::removeHierarchy(HierarchyItem *item)
-{
-    hrchy.removeAll(item);
 }
 
 int EntityItem::getWidth()
@@ -244,12 +345,26 @@ bool EntityItem::getIsWeak()
     return isWeak;
 }
 
+void EntityItem::setOldState(bool state){
+    this->ent->setOldState(state);
+}
+
 bool EntityItem::getHasIdDependency()
 {
     foreach(RelationshipItem * r,rships)
         if (r->getIdDependency())
             return true;
     return false;
+}
+
+QPointF EntityItem::getRectangleCenter() {
+
+    QRectF rect = QRectF(
+                QPointF(this->getMostLeftComponent()->x() - 10,this->getMostTopComponent()->y() - 10),
+                QPointF(this->getMostRightComponent()->x() + 10, this->getMostBottomComponent()->y() + 10));
+    this->centerRect = rect.center();
+
+    return (this->isAssociation) ? this->centerRect : QPointF(0,0);
 }
 
 QRectF EntityItem::boundingRect() const
@@ -267,12 +382,38 @@ void EntityItem::paint(QPainter *painter, const QStyleOptionGraphicsItem *, QWid
     QRectF br = boundingRect();
     br.setWidth(br.width()-30);
     QPen pen = painter->pen();
-    painter->setBrush(Qt::white);
-    if (this->isSelected()) painter->setPen(Qt::DashLine);
-    painter->drawRect(QRectF(QPointF(0,0),QPointF(width,height)));
+
+    if(this->isAssociation)
+        this->setZValue(-100);
+
+    painter->setBrush(Qt::transparent);
+
+    if (this->isSelected() && !this->isAssociation)
+            painter->setPen(Qt::DashLine);
+
+    if (this->isAssociation) {
+        QRectF rect = QRectF(
+                    QPointF(this->getMostLeftComponent()->x() - 10,this->getMostTopComponent()->y() - 10),
+                    QPointF(this->getMostRightComponent()->x() + 10, this->getMostBottomComponent()->y() + 10));
+        this->centerRect = rect.center();
+        painter->drawRect(rect);
+
+        QLineF l1(QPointF(this->getMostLeftComponent()->x() - 10, this->getMostTopComponent()->y() - 10),
+                  QPointF(this->getMostLeftComponent()->x() - 10, this->getMostBottomComponent()->y() + 10));
+
+        QLineF l2(QPointF(this->getMostLeftComponent()->x() - 10, this->getMostTopComponent()->y() - 10),
+                  QPointF(this->getMostRightComponent()->x() + 10, this->getMostTopComponent()->y() -10));
+
+        this->width = l1.length();
+        this->height = l2.length();
+    }
+    else
+        painter->drawRect(QRectF(QPointF(0,0),QPointF(width,height)));
+
     if (isWeak)
         painter->drawRect(QRectF(QPointF(3,3),QPointF(width-3,height-3)));
-    painter->drawText(QRectF(QPointF(0,0),QPointF(width,height)), Qt::AlignCenter, ent->getName());
+    if(!this->isAssociation)
+        painter->drawText(QRectF(QPointF(0,0),QPointF(width,height)), Qt::AlignCenter, ent->getName());
 
     QList<Attribute*> atts = ent->getAttributes();
     //Attribute *last;
@@ -296,12 +437,45 @@ void EntityItem::paint(QPainter *painter, const QStyleOptionGraphicsItem *, QWid
     if(this->position!=this->pos())
         this->graphicView->setSaved(false);
 }
-QVariant EntityItem::itemChange(QGraphicsItem::GraphicsItemChange change, const QVariant &value)
-{
+
+HierarchyItem* EntityItem::getHierarchy(){
+    return fatherH;
+}
+
+HierarchyItem* EntityItem::getHierarchySon(){
+    return sonH;
+}
+
+void EntityItem::setHierarchy(HierarchyItem *item){
+    fatherH = item;
+    ent->setHierarchy((Hierarchy*)item->getERItem());
+}
+
+void EntityItem::setHierarchySon(HierarchyItem *item){
+    sonH = item;
+    ent->setHierarchySon((Hierarchy*)item->getERItem());
+}
+
+bool EntityItem::isFather() const{
+    return ent->isFather();
+}
+
+void EntityItem::RemoveHierarchy(){
+    fatherH = NULL;
+    this->ent->RemoveHierarchy();
+}
+
+void EntityItem::RemoveHierarchySon(){
+    sonH = NULL;
+    this->ent->RemoveHierarchySon();
+}
+
+QVariant EntityItem::itemChange(QGraphicsItem::GraphicsItemChange change, const QVariant &value) {
     if  (change == ItemSceneHasChanged && this->scene()==NULL){
         foreach(RelationshipItem * rship, rships){
             rship->removeFromEntities();
-            if (rship->scene()!=NULL) rship->scene()->removeItem(rship);
+            if (rship->scene()!=NULL)
+                rship->scene()->removeItem(rship);
         }
     }
     if (change == ItemPositionHasChanged){
@@ -311,29 +485,35 @@ QVariant EntityItem::itemChange(QGraphicsItem::GraphicsItemChange change, const 
     }
     return QGraphicsItem::itemChange(change,value);
 }
+
 /**
  * @brief EntityItem::mousePressEvent
  * Methods for allowing movement only when pressing the Entity's rectangle.
  * Otherwise, the whole boundingRect is a posible selection area.
  */
-void EntityItem::mousePressEvent(QGraphicsSceneMouseEvent *event)
-{
+void EntityItem::mousePressEvent(QGraphicsSceneMouseEvent *event) {
     QRectF rect(QPointF(scenePos()),QPointF(scenePos()+QPointF(width,height)));
-    if (rect.contains(event->scenePos())){
+    if (rect.contains(event->scenePos()) && !this->isAssociation){
         isMoving = true;
         QGraphicsItem::mousePressEvent(event);
     }
-    else{
+    else {
         event->ignore();
         this->setSelected(false);
     }
 }
-void EntityItem::mouseMoveEvent(QGraphicsSceneMouseEvent *event)
-{
-    if (isMoving) QGraphicsItem::mouseMoveEvent(event);
+
+void EntityItem::mouseMoveEvent(QGraphicsSceneMouseEvent *event) {
+    if (isMoving && !this->isAssociation)
+        QGraphicsItem::mouseMoveEvent(event);
 }
-void EntityItem::mouseReleaseEvent(QGraphicsSceneMouseEvent *event)
-{
-    if (isMoving) QGraphicsItem::mouseReleaseEvent(event);
+
+void EntityItem::mouseReleaseEvent(QGraphicsSceneMouseEvent *event) {
+    if (isMoving) {
+        this->scene()->update();
+        this->scene()->update(this->sceneBoundingRect());
+        QGraphicsItem::mouseReleaseEvent(event);
+
+    }
     isMoving = false;
 }

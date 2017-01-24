@@ -3,12 +3,16 @@
 
 Hierarchy::Hierarchy(QString typeName, bool exclusive, bool total, Error *error, QList<Entity *> entities)
 {
-    this->name = "Hierarchy";
+    this->name = "Hierarchy " + entities.at(0)->getName();
     this->error = error;
     this->typeName = typeName;
     this->entities.append(entities);
     this->exclusive = exclusive;
     this->total = total;
+    int longEnt = entities.count();
+    entities.at(0)->setHierarchy(this);
+    for(int i = 1; i <entities.count(); i++)
+        entities.at(i)->setHierarchySon(this);
 }
 
 QString Hierarchy::getName()
@@ -16,37 +20,53 @@ QString Hierarchy::getName()
     return name;
 }
 
+QString Hierarchy::getTypeName()
+{
+    return typeName;
+}
+
 void Hierarchy::setName(QString name)
 {
     this->name = name;
+}
+Attribute *Hierarchy::getPrimaryKey(){
+    if(!entities.isEmpty())
+        return entities.at(0)->getPrimaryKey();
+    return NULL;
+}
+
+bool Hierarchy::isExclusive(){
+    return exclusive;
+}
+
+bool Hierarchy::isTotal(){
+    return total;
+}
+
+Entity *Hierarchy::getFather()
+{
+    if(!entities.isEmpty())
+        return entities.at(0);
 }
 
 bool Hierarchy::addAttribute(Attribute *, QString , Error *)
 {
     /*No se implementa*/
 }
-
-/**
- * Igual que el agregado, la suposicion de los atributos disponibles.
- */
 bool Hierarchy::removeAttribute(QString attributesName)
 {
-
+    /*No se implementa*/
 }
 
 QList<Attribute *> Hierarchy::getAllAttributes()
 {
-
+    /*No se implementa*/
 }
 
 QList<Attribute *> Hierarchy::getAttributes()
 {
-
+    /*No se implementa*/
 }
-
-/**
- * Lo mismo, si se aceptan otros tipos de atributos este metodo debe cambiar.
- */
 QList<Attribute *> Hierarchy::getAttributesToSave()
 {
     return getAttributes();
@@ -54,7 +74,7 @@ QList<Attribute *> Hierarchy::getAttributesToSave()
 
 QList<Cardinality *> Hierarchy::getCardinalities()
 {
-
+    /*No se implementa*/
 }
 
 QList<Entity *> Hierarchy::getEntities()
@@ -64,31 +84,14 @@ QList<Entity *> Hierarchy::getEntities()
 
 void Hierarchy::setEntities(QList<Entity *> entities)
 {
-    this->entities = entities;
+    this->entities.clear();
+    this->entities.append(entities);
 }
 
 bool Hierarchy::moveAttribute(QString attribute, int row, int newPos, QTableWidget *table)
 {
-
+    /*No se implementa*/
 }
-
-//given the entity name, return the option corresponding to it in such list
-QString Hierarchy::getOption(Entity *entity, QList<QString> options)
-{
-
-}
-
-QList<QString> Hierarchy::getOnDelete(){ }
-
-void Hierarchy::setOnDelete(QList<QString> opts){ }
-
-QList<QString> Hierarchy::getOnUpdate(){ }
-
-void Hierarchy::setOnUpdate(QList<QString> opts){ }
-
-QList<QString> Hierarchy::getMatch(){ }
-
-void Hierarchy::setMatch(QList<QString> opts){ }
 
 QDomElement *Hierarchy::getXML(QDomDocument *document, QString tagName)
 {
@@ -111,82 +114,50 @@ QDomElement *Hierarchy::getXML(QDomDocument *document, QString tagName)
     tmp->setAttribute("cont", QString::number(entities.size()));
     for(int i = 0; i< entities.size(); i++)
         tmp->setAttribute("name"+QString::number(i),((ERItem*)entities.at(i))->getName());
-
-    //for (int j = 0; j < cards.size(); j++){
-        //tmp->setAttribute("min"+QString::number(j),cards.at(j)->getMin());
-        //tmp->setAttribute("max"+QString::number(j),cards.at(j)->getMax());
-    //}
-    //if (entities.size() < 3)    tmp->setAttribute("rolename",roleName);
-
-    //foreach(Attribute * att, getAttributesToSave())
-        //att->addToXML(document,tmp,QString(""));
     return tmp;
 }
 
-void Hierarchy::setRolename(QString rn)
-{
-
-}
-
-QString Hierarchy::getRolename(){
-    return " ";
+QList<Entity *> Hierarchy::getSubtypes(){
+    QList<Entity*> aux;
+    for(int i = 1; i<entities.count(); i++)
+        aux << entities.at(i);
+    return aux;
 }
 
 QList<Relationship *> Hierarchy::getFKs()
 {
-
-}
-
-Hierarchy *Hierarchy::getCopy()
-{
-
+    /*No se implementa*/
 }
 
 QString Hierarchy::getSQL()
 {
-
+    /*No se implementa*/
 }
 
 QString Hierarchy::getDerivation()
 {
-
+    QString aux("");
+    Entity* ent = this->getFather();
+    Entity*son;
+    for(int i = 1; i < entities.count(); i++){
+        son = entities.at(i);
+        QString sonName = son->getName();
+        aux.append("ESUN_"+sonName+"["+sonName+"."+son->getPrimaryKey()->derive());
+        aux.append(";;;;;");
+        aux.append(ent->getName()+"."+ent->getPrimaryKey()->derive());
+        aux.append("]");
+    }
+    return aux;
 }
 
 void Hierarchy::addToTableSQL(QTableWidget *table)
 {
-
+    /*No se implementa*/
 }
 
-bool Hierarchy::alreadyExists(QString name)
-{
-    if(name.isEmpty())
-        return false;
-    else
-        foreach (Entity *item, entities) {
-            if(item->getName() == name)
-                return true;
-        }
-    return false;
-}
-
-QList<QString> Hierarchy::copyList(QList<QString *> list)
-{
-    QList<QString> result;
-    foreach(QString*s,list)
-        result << *s;
-    return result;
-}
-
-void Hierarchy::copyList(QList<QString *> &list, QList<QString> opts)
-{
-    if (list.size()==opts.size())
-        for (int i = 0; i < list.size(); i++){
-            list.at(i)->clear();
-            list.at(i)->append(opts.at(i));
-        }
-}
-
-QDomElement *Hierarchy::getXML(QDomDocument *document)
-{
-    /*implemento el otro metodo*/
+QDomElement *Hierarchy::getXML(QDomDocument *document){
+    /*Ya esta implementado, este metodo es
+     * necesario colocarlo porque pertenece
+     * a la interfaz pero no es utilizado
+     * aqui*/
 }

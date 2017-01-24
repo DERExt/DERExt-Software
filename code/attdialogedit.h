@@ -32,6 +32,8 @@ private slots:
     void on_buttonBox_rejected();
     void on_eraseKeyPButton_clicked();
 
+    void on_itemComboBox_currentIndexChanged(int index);
+
 private:
     void setAttributes(QList<Attribute *> atts);
     Attribute *getAttribute(int row);

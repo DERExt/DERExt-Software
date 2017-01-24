@@ -287,7 +287,7 @@
       <x>0</x>
       <y>80</y>
       <width>187</width>
-      <height>297</height>
+      <height>324</height>
      </rect>
     </property>
     <layout class="QVBoxLayout" name="verticalLayout">
@@ -360,6 +360,13 @@
          <width>32</width>
          <height>20</height>
         </size>
+       </property>
+      </widget>
+     </item>
+     <item>
+      <widget class="QCommandLinkButton" name="associationButton">
+       <property name="text">
+        <string>Association</string>
        </property>
       </widget>
      </item>

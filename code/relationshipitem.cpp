@@ -13,8 +13,14 @@ RelationshipItem::RelationshipItem(QString name, GraphicView * graphicsView, Err
     rhombusWidth = (name.count()*EntityItem::charWidth <= 40) ? 40 : name.count()*EntityItem::charWidth + 10;
     isMoving = false;
     rhombusHeigth = 25;
-
+    this->partOfAssociation = false;
+    this->hasAssociationInSomeEntity = false;
 }
+
+Relationship * RelationshipItem::getRship() {
+    return this->rship;
+}
+
 
 QString RelationshipItem::getName()
 {
@@ -32,6 +38,14 @@ bool RelationshipItem::addAttribute(Attribute *attribute, QString parent)
     if (graphicView)
         graphicView->setSaved(false);
     return rship->addAttribute(attribute,parent,error);
+}
+
+bool RelationshipItem::associationInSomeEntity() {
+    return this->hasAssociationInSomeEntity;
+}
+
+void RelationshipItem::setPartOfAssociation() {
+    this->partOfAssociation = true;
 }
 
 bool RelationshipItem::removeAttribute(QString attributesName)
@@ -135,12 +149,19 @@ void RelationshipItem::reloadEntities()
     }
 }
 
-QPointF RelationshipItem::rectangleCenter(EntityItem *item)
-{
-    qreal centerX = (item->pos().x() + item->getWidth() /2);
-    qreal centerY = (item->pos().y() + item->getHeight()/2);
+QPointF RelationshipItem::rectangleCenter(EntityItem *item) {
+    qreal centerX;
+    qreal centerY;
 
-    return QPointF(centerX,centerY);
+    if(item->isAssociation) {
+        this->hasAssociationInSomeEntity = true;
+        return item->getRectangleCenter();
+    }
+    else {
+        centerX = (item->pos().x() + item->getWidth() /2);
+        centerY = (item->pos().y() + item->getHeight()/2);
+        return QPointF(centerX,centerY);
+    }
 }
 
 QPointF *RelationshipItem::intersect(QList<QLineF> lines, QLineF line)

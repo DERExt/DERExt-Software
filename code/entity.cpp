@@ -1,14 +1,19 @@
 #include "entity.h"
-
+#include "hierarchy.h"
 #include <QDebug>
 
-Entity::Entity(QString name, Error * error)
+Entity::Entity(QString name, Error * error, bool isAssociation, Relationship * rel)
 {
     this->name = name;
     this->primaryKey = NULL;
     this->error = error;
     this->altKey = 1;
-    this->father = NULL;
+    this->fatherH = NULL;
+    this->sonH =NULL;
+    this->newInDERE = true;
+    this->associationRel = rel;
+    this->isAssociation = isAssociation;
+    subtype = false;
 }
 
 QString Entity::getName()
@@ -21,16 +26,37 @@ void Entity::setName(QString name)
     this->name = name;
 }
 
+QString Entity::getPrefix()
+{
+    if (!this->isAssociative()) {
+        if(sonH != NULL && fatherH != NULL)
+            return "B_";
+        else
+            if(sonH != NULL && fatherH == NULL)
+                return "S_";
+            else
+                if(sonH == NULL && fatherH != NULL)
+                    return "P_";
+                else
+                    return "R_";
+    }
+    else {
+        //Asociación.
+        return "A_";
+    }
+}
+
 QString Entity::getDerivation()
 {
     QString aux("");
+    QString prefix = getPrefix();
     QList<Attribute*> derArr[4];
     foreach(Attribute* att, secondaryKeys)
         derArr[secondaryKey].append(att);
     foreach(Attribute* att, atts)
         att->getDeriveList(derArr);
-    if(primaryKey!=NULL){
-        aux = "R_"+this->getName()+"["+primaryKey->derive()+";";
+    if(getPrimaryKey()!=NULL){
+        aux = prefix+this->getName()+"["+getPrimaryKey()->derive()+";";
         for(int i = secondaryKey ; i<=multAtts ; i++){
             QString s;
             QList<Attribute*> a = derArr[i];
@@ -43,7 +69,15 @@ QString Entity::getDerivation()
             }
             aux.append(";");
         }
-        aux.append("]");
+        if(fatherH != NULL){
+            QString type = fatherH->getTypeName();
+            if(fatherH->isTotal())
+                aux.append("(T,"+type+")]");
+            else
+                aux.append("(P,"+type+")]");
+        }
+        else
+            aux.append("]");
     }
     else error->setError(Error::NoPrimaryKey);
     return aux;
@@ -123,7 +157,10 @@ void Entity::addN1Rship(Relationship *rship)
 
 Attribute *Entity::getPrimaryKey() const
 {
-    return this->primaryKey;
+    if((fatherH != NULL && sonH == NULL) || (fatherH == NULL && sonH == NULL))
+        return this->primaryKey;
+    if(sonH != NULL)/*Arreglar*/
+        return sonH->getPrimaryKey();
 }
 
 QString Entity::getPKder(bool isOpt)
@@ -135,20 +172,32 @@ QString Entity::getPKder(bool isOpt)
 
 bool Entity::setPrimaryKey(Attribute *pk)
 {
-    if(pk->canBePK() && !isChild(pk) && !compoundSecondary.contains(pk)){
+    if(subtype){
+        return this->setSecondaryKey(pk);
+    }else{
+    if(pk == NULL){
         this->removeAttribute(pk->getName());
-        if(this->primaryKey!=NULL){
-            Attribute *tmp = this->primaryKey;
-            this->primaryKey = pk;
-            pk->setSecondaryKey(false); //in case it was SK
-            tmp->setPrimaryKey(false);
-            this->addAttribute(tmp, QString(""), error);
-        }
-        else this->primaryKey = pk;
-        pk->setPrimaryKey(true);
+        this->primaryKey = NULL;
+        pk->setPrimaryKey(false);
         return true;
+    }else{
+        if(pk->canBePK() && !isChild(pk) && !compoundSecondary.contains(pk)){
+            this->removeAttribute(pk->getName());
+            if(this->primaryKey!=NULL){
+                Attribute *tmp = this->primaryKey;
+                this->primaryKey = pk;
+                pk->setSecondaryKey(false); //in case it was SK
+                tmp->setPrimaryKey(false);
+                this->addAttribute(tmp, QString(""), error);
+            }
+            else this->primaryKey = pk;
+            pk->setPrimaryKey(true);
+            return true;
+        }
+        else
+            return false;
     }
-    else return false;
+}
 }
 
 bool Entity::setSecondaryKey(Attribute *sk)
@@ -169,6 +218,13 @@ bool Entity::setSecondaryKey(Attribute *sk)
         error->setError(Error::PrimarySecondary);
         return false;
     }
+}
+
+bool Entity::removePrimaryKey(Attribute *pk)
+{
+    primaryKey = NULL;
+    pk->setPrimaryKey(false);
+    return true;
 }
 
 bool Entity::setSecondaryKeyComp(QList<Attribute *> atts)
@@ -261,27 +317,38 @@ bool Entity::alreadyExists(QString name){
     return false;
 }
 
+void Entity::setOldState(bool state){
+    newInDERE = state;
+}
+
 bool Entity::addAttribute(Attribute *attribute, QString parent, Error *error)
 {
     if(!alreadyExists(attribute->getName())){
         if(parent.isEmpty()){
-            if(primaryKey!=NULL || !setPrimaryKey(attribute))
+            /*if(!subtype && newInDERE){
+                if((primaryKey!=NULL || !setPrimaryKey(attribute)))
+                    atts.push_back(attribute);
+            }else{*/
                 atts.push_back(attribute);
+                return true;
+            /*}
+            newInDERE = false;*/
         }
         else{ //is complex attribute
-            if(this->primaryKey!=NULL && this->primaryKey->addAttribute(attribute, parent))
+            /*if((!subtype && newInDERE && this->primaryKey!=NULL && this->primaryKey->addAttribute(attribute, parent))){
+                newInDERE = false;
                 return true;
-            else{
-                foreach(Attribute *att, secondaryKeys){
+            }else{*/
+                /*foreach(Attribute *att, secondaryKeys){
                     if(att->addAttribute(attribute, parent))
                         return true;
-                }
+                }*/
                 foreach(Attribute *att, atts){
                     if(att->addAttribute(attribute, parent))
                         return true;
                 }
                 return false;
-            }
+            //}
         }
         return true;
     }
@@ -290,6 +357,7 @@ bool Entity::addAttribute(Attribute *attribute, QString parent, Error *error)
         return false;
     }
 }
+
 
 bool Entity::removeAttribute(QString attributesName)
 {
@@ -335,7 +403,7 @@ QList<Attribute *> Entity::getAllAttributes()
 QList<Attribute *> Entity::getAttributes()
 {
     QList<Attribute*> tmp;
-    if(primaryKey!=NULL)
+    if(primaryKey!=NULL)/***************************/
         tmp.append(primaryKey);
     tmp.append(secondaryKeys);
     tmp.append(atts);
@@ -365,6 +433,54 @@ void Entity::generateCompSK()
     this->setSecondaryKeyComp(partialSK);
 }
 
+void Entity::setAssociation(Relationship * r) {
+    this->isAssociation = true;
+    this->associationRel = r;
+}
+
+Relationship * Entity::getAssociationRel() {
+    return this->associationRel;
+}
+
+bool Entity::isAssociative() {
+    return this->isAssociation;
+}
+
+Hierarchy* Entity::getHierarchy()
+{/***************************************************/
+    return fatherH;
+}
+
+void Entity::setHierarchy(Hierarchy* item)
+{/***************************************************/
+    fatherH = item;
+}
+
+bool Entity::isFather() const
+{/***************************************************/
+    if(fatherH != NULL)
+        return true;
+    return false;
+}
+void Entity::RemoveHierarchy(){
+    fatherH = NULL;
+}
+
+void Entity::RemoveHierarchySon()
+{/***************************************************/
+    sonH=NULL;
+}
+
+void Entity::setHierarchySon(Hierarchy* item)
+{/***************************************************/
+    sonH = item;
+}
+
+Hierarchy *Entity::getHierarchySon()
+{/***************************************************/
+    return sonH;
+}
+
 QList<Attribute *> Entity::getAttributesToSave()
 {
     QList<Attribute*> tmp = this->getAttributes(), aux;
@@ -386,6 +502,10 @@ QList<Attribute *> Entity::getSecondaryKeys()
 Entity *Entity::getCopy()
 {
     Entity *tmp = new Entity(this->name, this->error);
+    tmp->setSubtype(subtype);
+    tmp->setHierarchy(fatherH);
+    tmp->setHierarchySon(sonH);
+    tmp->setOldState(newInDERE);/***** NEW *****/
     if(primaryKey!=NULL){
         Attribute *aux = primaryKey->getCopy();
         tmp->addAttribute(aux, "", this->error);
@@ -406,26 +526,26 @@ QList<Relationship *> Entity::getFKs()
     return this->N1rships;
 }
 
-QDomElement *Entity::getXML(QDomDocument *document)
-{
+QDomElement *Entity::getXML(QDomDocument *document) {
     QDomElement *tmp = new QDomElement(document->createElement("Entity"));
     tmp->setAttribute("name", this->getName());
+    tmp->setAttribute("subtype",subtype);
+
+    tmp->setAttribute("isAssociative", this->isAssociative());
+    if(this->isAssociative())
+        tmp->setAttribute("associationRel", this->associationRel->getName());
     foreach(Attribute *att, getAttributesToSave())
         att->addToXML(document, tmp, QString("")); //second argument is parent
 
     return tmp;
 }
 
-void Entity::setFather(Entity *item)
+bool Entity::isSubtype()
 {
-    this->father = item;
+    return this->subtype;
 }
 
-Entity* Entity::getFather(){
-    return this->father;
-}
-
-void Entity::deleteFather()
+void Entity::setSubtype(bool op)
 {
-    this->father = NULL;
+    this->subtype = op;
 }

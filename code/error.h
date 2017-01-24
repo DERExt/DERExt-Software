@@ -11,7 +11,7 @@ public:
     enum ErrorType{NoTab, NoItems, InvalidPK, PrimarySecondary, SecondaryChild, DuplicateEntity,
                    UndefinedAttributes, InvalidFile, NoError, NoPrimaryKey, EmptyNameAttribute,
                    EmptyNameEntity, NameTaken, EmptyNameRship, Cardinality, SameRships, WeakEntity,
-                  TypeHrchy, NameSub, NoEntity, EmptyTypeName } error;
+                  TypeHrchy, NameSub, NoEntity, EmptyTypeName, PartHierarchy } error;
 
     Error(QWidget *parent);
     void setError(ErrorType errorType);

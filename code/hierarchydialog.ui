@@ -74,6 +74,9 @@
      <height>20</height>
     </rect>
    </property>
+   <property name="insertPolicy">
+    <enum>QComboBox::InsertAlphabetically</enum>
+   </property>
   </widget>
   <widget class="QLabel" name="label">
    <property name="geometry">
@@ -187,6 +190,22 @@
     </item>
    </layout>
   </widget>
+  <widget class="QDialogButtonBox" name="buttonBox_2">
+   <property name="geometry">
+    <rect>
+     <x>550</x>
+     <y>191</y>
+     <width>75</width>
+     <height>76</height>
+    </rect>
+   </property>
+   <property name="orientation">
+    <enum>Qt::Vertical</enum>
+   </property>
+   <property name="standardButtons">
+    <set>QDialogButtonBox::Cancel|QDialogButtonBox::Ok</set>
+   </property>
+  </widget>
   <zorder>layoutWidget</zorder>
   <zorder>sup</zorder>
   <zorder>label</zorder>
@@ -196,6 +215,7 @@
   <zorder>layoutWidget</zorder>
   <zorder>totalBool</zorder>
   <zorder>exclusiveBool</zorder>
+  <zorder>buttonBox_2</zorder>
  </widget>
  <resources/>
  <connections/>

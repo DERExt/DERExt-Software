@@ -97,7 +97,82 @@ void RUnaryItem::paint(QPainter *painter, const QStyleOptionGraphicsItem *, QWid
 
     //conexion
     painter->setPen(QPen(Qt::black, 1, Qt::SolidLine, Qt::RoundCap, Qt::RoundJoin));
-    painter->drawRect(QRectF(QPointF(points.at(0).x(),center.y()),QPointF(center.x(),points.at(0).y())));
+
+    /**
+     * | LADO IZQUIERDO
+     */
+
+    QLineF line1(
+        QPointF(points.at(0).x(), center.y()),
+        QPointF(points.at(0).x(),points.at(0).y())
+    );
+
+    /**
+     * _ ABAJO
+     */
+
+    QLineF line2(
+        QPointF(center.x(),points.at(0).y()),
+        QPointF(points.at(0).x(),points.at(0).y())
+    );
+
+    /**
+     * | DERECHO
+     */
+
+    QLineF line3(
+        QPointF(center.x(),center.y()),
+        QPointF(center.x(),points.at(0).y())
+    );
+
+    /**
+     * _ ARRIBA
+     */
+
+    QLineF line4(
+        QPointF(center.x(),center.y()),
+        QPointF(points.at(0).x(), center.y())
+    );
+
+    foreach(EntityItem * item, this->getEntities()) {
+        QPointF * in = intersectRect(item->getRectangle(), line1);
+        if (in != NULL) {
+            QPointF pInt(*in);
+            QLineF newLine(pInt,QPointF(points.at(0).x(), center.y()));
+            line1 = newLine;
+        }
+    }
+
+    foreach(EntityItem * item, this->getEntities()) {
+        QPointF * in = intersectRect(item->getRectangle(), line2);
+        if (in != NULL) {
+            QPointF pInt(*in);
+            QLineF newLine(pInt,QPointF(center.x(),points.at(0).y()));
+            line2 = newLine;
+        }
+    }
+    foreach(EntityItem * item, this->getEntities()) {
+        QPointF * in = intersectRect(item->getRectangle(), line3);
+        if (in != NULL) {
+            QPointF pInt(*in);
+            QLineF newLine(pInt, points.at(0));
+            line3 = newLine;
+        }
+    }
+
+    foreach(EntityItem * item, this->getEntities()) {
+        QPointF * in = intersectRect(item->getRectangle(), line4);
+        if (in != NULL) {
+            QPointF pInt(*in);
+            QLineF newLine(pInt, points.at(0));
+            line4 = newLine;
+        }
+    }
+
+    painter->drawLine(line1);
+    painter->drawLine(line2);
+    painter->drawLine(line3);
+    painter->drawLine(line4);
 
     //atributos
     int x = centerX + 30;
@@ -123,7 +198,7 @@ void RUnaryItem::paint(QPainter *painter, const QStyleOptionGraphicsItem *, QWid
 
     //cardinalidades
     QList<Cardinality *> cards = rship->getCardinalities();
-    if (cards.size() == expectedArity +1){         //tamaño correcto que deberia tener en relacion unaria
+    if (cards.size() == expectedArity +1){         //tama?o correcto que deberia tener en relacion unaria
         QPointF middle = (points.at(0)+center)/2;
         painter->drawText(middle + QPointF(0,heightLoop-50),cards.at(0)->getText());
         painter->drawText(middle - QPointF(10,heightLoop-25),cards.at(1)->getText());

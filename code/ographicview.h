@@ -22,14 +22,6 @@ class GraphicView : public QGraphicsView
 
 private:
     void setName();
-    void setNewPosition(bool alignX, int newComponent, int offset, QGraphicsItem * item);
-    int getNewComponent(bool alignX, bool min);
-    int getDistance(QGraphicsItem * from, QGraphicsItem * to);
-
-    QGraphicsItem * getMostLeftComponent();
-    QGraphicsItem * getMostRightComponent();
-    QGraphicsItem * getMostTopComponent();
-    QGraphicsItem * getMostBottomComponent();
 
 public:
     GraphicView(QWidget *parent);
@@ -44,10 +36,6 @@ public:
     IGraphicItem* getItem(QString name);
     QMenu *buildAlignMenu();
     void align(bool alignX, bool min);
-    //Tomás.
-    void reset() {
-        this->items().clear();
-    };
 
 public slots:
     void alignTop();

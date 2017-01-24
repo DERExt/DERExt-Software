@@ -8,15 +8,24 @@ entityDialog::entityDialog(QList<QGraphicsItem*> items,QWidget *parent) :
     ui->setupUi(this);
     ui->entitiesComboBox->setEnabled(false);
     ui->checkBox->setChecked(false);
+    ui->check_sub->setChecked(false);
+    listItems.clear();
     this->listItems.append(items);
     ui->nameLineEdit->setFocus();
 
+    QList<QString> temp;
+
     foreach(QGraphicsItem * item, listItems){
-        if (item->type() == EntityItem::Type){
-            ui->entitiesComboBox->addItem(((IGraphicItem*)item)->getName());            
+        if (item->type() == EntityItem::Type && !((EntityItem*)item)->isAssociation){
+            temp << ((IGraphicItem*)item)->getName();
         }
         backup.append(((IGraphicItem*)item)->getCopy());
     }
+
+    std::sort(temp.begin(), temp.end());
+
+    ui->entitiesComboBox->addItems(temp);
+
     error = new Error(this);
 
     ui->modeComboBox->addItem("Create");
@@ -44,7 +53,8 @@ void entityDialog::on_buttonBox_accepted()
                 EntityItem * entity;
                 if (ui->checkBox->isChecked() && !listItems.isEmpty()){         //si es entidad debil
                     EntityItem * strongEnt = getCurrentEntity();
-                    entity = new EntityItem(entityName,NULL,NULL,error,window,true,(Entity*)strongEnt->getERItem());
+                    bool sub = ui->check_sub->isChecked();
+                    entity = new EntityItem(entityName,NULL,NULL,error,window,sub,true,true,(Entity*)strongEnt->getERItem());
                     window->addItem(entity);        //necesito la entidad en la scene antes de poder agregar Rship
                     QList<EntityItem*> entities;
                     entities << strongEnt << entity;
@@ -61,7 +71,8 @@ void entityDialog::on_buttonBox_accepted()
                     rshipDialog->show();
                 }
                 else{
-                    EntityItem * entity = new EntityItem(entityName, NULL, NULL, error, window);
+                    bool sub = ui->check_sub->checkState();
+                    EntityItem * entity = new EntityItem(entityName, NULL, NULL, error, window, sub, true);
                     window->addItem(entity);
                 }
                 error->setError(Error::NoError);
@@ -74,6 +85,21 @@ void entityDialog::on_buttonBox_accepted()
         else{
             error->setError(Error::EmptyNameEntity);
             this->show();
+        }
+    }
+    if (mode == entityDialog::Modify){
+        QString newName = ui->nameLineEdit->text();
+        if (newName.isEmpty()){
+            error->setError(Error::EmptyNameEntity);
+            this->show();
+        }
+        else{
+            QList<QString> names;
+            foreach(QGraphicsItem * item, listItems)
+                names.append(((IGraphicItem*)item)->getName());
+            EntityItem * ent = getCurrentEntity();
+            ent->setName(newName);
+            ((MainWindow*)this->parent())->setSaved(false);
         }
     }
 }
@@ -111,6 +137,7 @@ void entityDialog::on_modeComboBox_currentIndexChanged(int index)
 
     switch(mode){
         case(entityDialog::Create):{
+            ui->check_sub->setChecked(false);
             ui->checkBox->setHidden(false);
             ui->entitiesComboBox->setEnabled(false);
             ui->comboBoxLayout->setContentsMargins(0,0,0,0);
@@ -119,43 +146,22 @@ void entityDialog::on_modeComboBox_currentIndexChanged(int index)
             ui->gridLayout->addItem(ui->lineEditLayout,1,0);
             ui->gridLayout->addItem(ui->comboBoxLayout,2,0);
             ui->nameLineEdit->setText("");
-            break;
-        }
-        case(entityDialog::Modify):{
-            ui->checkBox->setHidden(true);
-            ui->comboBoxLayout->setContentsMargins(0,15,0,0);
-            ui->entitiesComboBox->setEnabled(true);
-            ui->gridLayout->removeItem(ui->comboBoxLayout);
-            ui->gridLayout->removeItem(ui->lineEditLayout);
-            ui->gridLayout->addItem(ui->comboBoxLayout,1,0);
-            ui->gridLayout->addItem(ui->lineEditLayout,2,0);
-            on_entitiesComboBox_currentIndexChanged(0);
-            break;
-        }
-    }
-}
 
-void entityDialog::on_nameLineEdit_editingFinished()
-{
-    if (mode == entityDialog::Modify){
-        QString newName = ui->nameLineEdit->text();
-        if (newName.isEmpty()){
-            error->setError(Error::EmptyNameEntity);
-            this->show();
+            break;
         }
-        else{
-            QList<QString> names;
-            foreach(QGraphicsItem * item, listItems)
-                names.append(((IGraphicItem*)item)->getName());
-            if(!names.contains(newName)){
-                EntityItem * ent = getCurrentEntity();
-                ent->setName(newName);
-                ((MainWindow*)this->parent())->setSaved(false);
+        case(entityDialog::Modify):{/*CORREGIDO*/
+            if(!listItems.isEmpty()){
+                ui->checkBox->setHidden(true);
+                ui->comboBoxLayout->setContentsMargins(0,15,0,0);
+                ui->entitiesComboBox->setEnabled(true);
+                ui->gridLayout->removeItem(ui->comboBoxLayout);
+                ui->gridLayout->removeItem(ui->lineEditLayout);
+                ui->gridLayout->addItem(ui->comboBoxLayout,1,0);
+                ui->gridLayout->addItem(ui->lineEditLayout,2,0);
+                on_entitiesComboBox_currentIndexChanged(0);
+                ui->check_sub->setChecked(getCurrentEntity()->isSubtype());
             }
-            else{
-                error->setError(Error::DuplicateEntity);
-                this->show();
-            }
+        break;
         }
     }
 }
@@ -163,6 +169,7 @@ void entityDialog::on_nameLineEdit_editingFinished()
 void entityDialog::on_entitiesComboBox_currentIndexChanged(int index)
 {
     if (mode == entityDialog::Modify && index >= 0){
+        ui->check_sub->setChecked(getCurrentEntity()->isSubtype());
         ui->nameLineEdit->setText(ui->entitiesComboBox->currentText());
     }
 }
@@ -176,3 +183,31 @@ void entityDialog::on_buttonBox_rejected()
         main->addItem((IGraphicItem*)item);
     this->close();
 }
+
+void entityDialog::on_check_sub_clicked(bool checked)
+{
+    if(mode == entityDialog::Modify){
+        bool sub = ui->check_sub->checkState();
+        Entity * ent = ((Entity*)getCurrentEntity()->getERItem());
+        if(sub){
+            getCurrentEntity()->setSubtype(sub);
+            Attribute * att = ent->getPrimaryKey();
+            if(att != NULL){
+                ent->removePrimaryKey(att);
+                ent->setSecondaryKey(att);
+            }
+        }
+        else{
+            HierarchyItem *hSon = getCurrentEntity()->getHierarchySon();
+            if(hSon == NULL){
+                ent->setSubtype(sub);
+            }else{
+                ent->setSubtype(!sub);
+                error->setError(Error::PartHierarchy);
+                this->show();
+                ui->check_sub->setCheckState(Qt::Checked);
+            }
+        }
+    }
+}
+

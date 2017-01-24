@@ -3,6 +3,7 @@
 
 #include "entityitem.h"
 #include "rbinary.h"
+#include <QWidget>
 
 const int widthLoop = 75;
 const int heightLoop = 75;

@@ -2,6 +2,7 @@
 #define RELATIONSHIPITEM_H
 #include "relationship.h"
 #include "graphicview.h"
+#include <QPointF>
 class EntityItem;
 
 class RelationshipItem : public IGraphicItem
@@ -14,19 +15,22 @@ protected:
     QPointF center;
     QList<EntityItem*> entities;
     QList<QPointF> points;
+
     bool isMoving;
     int rhombusWidth;
     int rhombusHeigth;
+    bool partOfAssociation;
+    bool hasAssociationInSomeEntity;
+
 
     QPointF *intersect(QList<QLineF> lines, QLineF line);
     QPointF *intersectRect(QRectF rect, QLineF line);
-    QPointF rectangleCenter(EntityItem *item);
+    QPointF rectasngleCenter(EntityItem *item);
     QVariant itemChange(GraphicsItemChange change, const QVariant &value);
     void mousePressEvent(QGraphicsSceneMouseEvent *event);
     void mouseMoveEvent(QGraphicsSceneMouseEvent *event);
     void mouseReleaseEvent(QGraphicsSceneMouseEvent *event);
     void load(QDomElement *e);
-
 
 public:
     enum { Type = UserType + 11 };
@@ -34,6 +38,9 @@ public:
     RelationshipItem(QString name, GraphicView * graphicsView, Error * error, QWidget * parent);
 
     QString getName();
+
+    Relationship *getRship();
+
     void setName(QString name);
     bool addAttribute(Attribute *attribute, QString parent);
     bool removeAttribute(QString attributesName);
@@ -50,6 +57,10 @@ public:
     QList<Cardinality *> getCardinalities();
     bool moveAttribute(QString attribute, int row, int pos, QTableWidget *table);
     ERItem * getERItem();
+    QPointF rectangleCenter(EntityItem *item);
+
+    void setPartOfAssociation();
+    bool associationInSomeEntity();
 
     virtual void reloadEntities();
     virtual void removeFromEntities();

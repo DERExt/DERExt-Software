@@ -30,6 +30,8 @@ private slots:
 
 private:
     Ui::RemoveDialog *ui;
+    void removeSpecialHierarchy(HierarchyItem *hie);
+    void removeHierarchy(HierarchyItem *hie);
 };
 
 #endif // REMOVEDIALOG_H

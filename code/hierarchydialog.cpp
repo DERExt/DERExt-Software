@@ -1,7 +1,7 @@
 #include "hierarchydialog.h"
 #include "ui_hierarchydialog.h"
-#include "dibujar.h"
 #include "rternaryitem.h"
+#include "entityitem.h"
 
 HierarchyDialog::HierarchyDialog(QList<QGraphicsItem*> items, QWidget *parent) :
     QDialog(parent),
@@ -12,11 +12,6 @@ HierarchyDialog::HierarchyDialog(QList<QGraphicsItem*> items, QWidget *parent) :
     ui->setupUi(this);
     ui->lineEdit->setDisabled(true);
     foreach(QGraphicsItem * item, sceneItems){
-        //if (item->type() == EntityItem::Type){
-            //ui->sup->addItem(((IGraphicItem*)item)->getName());
-            //QString name = ((IGraphicItem*)item)->getName();
-            //ui->listEnt->insertItem(0, name);
-        //}
         backup.append(((IGraphicItem*)item)->getCopy());
     }
 
@@ -25,13 +20,6 @@ HierarchyDialog::HierarchyDialog(QList<QGraphicsItem*> items, QWidget *parent) :
     ui->modeComboBox->addItem("Modify");
     this->mode = Mode(ui->modeComboBox->currentIndex());
 }
-
-void HierarchyDialog::on_rtypeComboBox_activated(const QString &arg1)
-{
-
-}
-
-
 
 void HierarchyDialog::on_buttonBox_accepted()
 {
@@ -52,10 +40,11 @@ void HierarchyDialog::on_buttonBox_accepted()
     }
     if(ui->listSub->count() > 1 ){
         if(mode == HierarchyDialog::Modify){
-            auxModify = getHierarchy()->getEntities().at(0);
-            MainWindow * window = (MainWindow*)this->parentWidget();
-            window->deleteItem(getHierarchy());
-            sceneItems.removeOne(getHierarchy());
+            auxModify = getHierarchy()->getEntities().at(0);/***/
+            removeHierarchy(getHierarchy()->getEntities());/*Elimina la jerarquia de cada entidad*/
+            MainWindow * window = (MainWindow*)this->parentWidget();/***/
+            window->deleteItem(getHierarchy());/*******************/
+            sceneItems.removeOne(getHierarchy());/*******************/
         }
         MainWindow * window = (MainWindow*)this->parentWidget();
         HierarchyItem * item = createHierarchy();
@@ -66,6 +55,13 @@ void HierarchyDialog::on_buttonBox_accepted()
          error->setError(Error::NoEntity);
         this->show();
         return;
+    }
+}
+
+void HierarchyDialog::removeHierarchy(QList<EntityItem*> list){
+    int cont = list.count();
+    for(int i = 1; i< cont; i++){
+        ((Entity*)list.at(i)->getERItem())->RemoveHierarchySon();
     }
 }
 
@@ -94,16 +90,6 @@ void HierarchyDialog::on_exclusiveBool_clicked(bool checked)
     }
     else
         ui->lineEdit->setDisabled(true);
-}
-
-void HierarchyDialog::on_HierarchyDialog_destroyed()
-{
-
-}
-
-void HierarchyDialog::on_checkBox_clicked()
-{
-
 }
 
 void HierarchyDialog::on_pushAdd_clicked()
@@ -145,9 +131,6 @@ HierarchyItem *HierarchyDialog::createHierarchy()
     else{
         if(mode == HierarchyDialog::Modify){
             entities << auxModify;
-            foreach(EntityItem *item, entities){
-                item->deleteFather();
-            }
         }
     }
     foreach(QGraphicsItem * item, sceneItems){
@@ -155,18 +138,32 @@ HierarchyItem *HierarchyDialog::createHierarchy()
             for(int i = 0; i < longList ; i++){
                 if(ui->listSub->item(i)->text() == ((IGraphicItem*)item)->getName()){
                     entities << (((EntityItem*)item));
-                    ((EntityItem*)item)->setFather(entities.at(0));
                 }
             }
         }
     }
-
         bool exc = ui->exclusiveBool->checkState();
         bool tot = ui->totalBool->checkState();
         MainWindow * window = (MainWindow*)this->parentWidget();
         return new HierarchyItem(NULL,error,window, ui->lineEdit->text(), exc ,tot, entities);
 
 }
+
+bool HierarchyDialog::isFatherValid(EntityItem* item)
+{/************************************************/
+    Entity *ent = ((Entity*)item->getERItem());
+    if(ent->getHierarchy() == NULL)
+        return true;
+    return false;
+}
+bool HierarchyDialog::isSonValid(EntityItem* item)
+{/************************************************/
+    Entity *ent = ((Entity*)item->getERItem());
+    if(ent->getHierarchySon() == NULL && ent->isSubtype())
+        return true;
+    return false;
+}
+
 
 HierarchyItem *HierarchyDialog::getHierarchy()
 {
@@ -181,94 +178,37 @@ HierarchyItem *HierarchyDialog::getHierarchy()
     }
 }
 
-
-
-/*void HierarchyDialog::paintEvent(QPaintEvent *event)
-{
-    QPainter painter(this);
-    //ui->setupUi(this);
-    //QGraphicsItem a = new QGraphicsItem();
-
-    QPen framePen(Qt::black);
-    framePen.setWidth(3);/*Grosor el lapiz*/
-/*    painter.setPen(framePen);
-
-    QPoint posR(180, 150);/*Posicion X e Y del centro de la entidad.*/
-/*    QSize dimR(60,35);/*Dimensiones del circulo*/
-/*    QRect recR(posR, dimR);
-    painter.drawRect(recR);
-    QPoint d(recR.center());
-    d.setY(d.y()+ recR.height()/2+2);
-
-
-    QPoint pos(195, 203);/*Posicion X e Y predeterminado.*/
-/*    QSize dim(35,35);/*Dimensiones del circulo*/
-/*    QRect rec(pos, dim);/*Posicion y dimension el circulo*/
-
-/*    painter.drawEllipse(rec);/*Dibujar circulo*/
-/*    QPoint pf(7, 7);
-    QPoint medioArriba(pos);
-    medioArriba.setX(medioArriba.x() + dim.height()/2);/*Punto medio de arriba*/
-/*    QPoint medioAbajo(medioArriba);
-    medioAbajo.setY(medioAbajo.y() + dim.height());/*Punto medio de abajo*/
-/*    painter.drawLine(d, medioArriba);
-
-
-    /*Creacion de X exclusiva*/
-/*    QPoint p6(7, 7);
-/*    QPoint p5(pos);
-    /*Punto p1*/
-/*    QPoint p1(p5.operator +=(p6));
-    /*Punto p2*/
-/*    QPoint p2(p1);
-    p2.setX(p2.x()+20);
-    /*Punto p3*/
-/*    QPoint p3(p1);
-/*    p3.setY(p3.y()+20);
-    /*Punto p4*/
-/*    QPoint p4(p2);
-    p4.setY(p4.y()+20);
-
-
-    QString tipoExclusivo("tipo:  ");
-    QPoint puntoTipo(pos);
-    puntoTipo.setX(puntoTipo.x() + dim.width());
-    painter.drawText(puntoTipo, tipoExclusivo);
-    painter.drawLine(p1, p4);/*Dibuja linea 1*/
-/**   painter.drawLine(p2, p3);/*Dibuja linea 2*/
-
-
 void HierarchyDialog::on_modeComboBox_currentIndexChanged(int index)
 {
     this->mode = Mode(index);
 
     ui->lineEdit->setDisabled(true);
+
+    QList<QString> names;
+
     if (mode == HierarchyDialog::Create){
         ui->listSub->clear();
         ui->listEnt->clear();
         ui->sup->clear();
         foreach(QGraphicsItem * item, sceneItems){
-            if (item->type() == EntityItem::Type){
-                ui->sup->addItem(((IGraphicItem*)item)->getName());
-                //QString name = ((IGraphicItem*)item)->getName();
-                //ui->listEnt->insertItem(0, name);
+            if (item->type() == EntityItem::Type && isFatherValid((EntityItem*)item)){
+                names << ((IGraphicItem*)item)->getName();
             }
         }
     }
     else
     if (mode == HierarchyDialog::Modify){
-        //ui->rtypeLabel->setText("Relationship");
         ui->sup->clear();
         ui->listEnt->clear();
 
         foreach(QGraphicsItem * item, this->sceneItems){
             if (item->type() == HierarchyItem::Type)
-                ui->sup->addItem(((IGraphicItem*)item)->getName());
+                names << ((IGraphicItem*)item)->getName();
         }
-        /*if (ui->sup->count() > 0)
-            on_rtypeComboBox_currentIndexChanged(0);  */  //so that nameLineEdit starts with rship text.
     }
 
+    std::sort(names.begin(),names.end());
+    ui->sup->addItems(names);
 }
 
 void HierarchyDialog::on_sup_currentIndexChanged(int index)
@@ -276,58 +216,54 @@ void HierarchyDialog::on_sup_currentIndexChanged(int index)
     if (index < 0)
         return;
 
+    QList<QString> names;
+
     switch(mode){
         case(HierarchyDialog::Create):{
             ui->listEnt->clear();
             foreach(QGraphicsItem * item, sceneItems){
                 if (item->type() == EntityItem::Type){
                     if(((IGraphicItem*)item)->getName() != ui->sup->currentText()){
-                        //ui->sup->addItem(((IGraphicItem*)item)->getName());
-                        QString name = ((IGraphicItem*)item)->getName();
-                        ui->listEnt->insertItem(0, name);
-
+                        if(isSonValid((EntityItem*)item)){
+                            QString name = ((IGraphicItem*)item)->getName();
+                            names << name;
+                        }
                     }
                 }
             }
-            /*updateEntities(index);
-            on_max1LineEdit_editingFinished();*/
+            std::sort(names.begin(), names.end());
+            ui->listEnt->insertItems(0,names);
             break;
         }
         case(HierarchyDialog::Modify):{
             HierarchyItem * hierarchy = getHierarchy();
             QList<EntityItem*> ents = hierarchy->getEntities();
             ui->listSub->clear();
+            ui->listEnt->clear();
+
+
             foreach(EntityItem* item, ents){
                 if(item->getName() != ents.at(0)->getName())
-                    ui->listSub->insertItem(0, item->getName());
+                    names << item->getName();
             }
+
+            std::sort(names.begin(), names.end());
+            ui->listSub->insertItems(0, names);
+            names.clear();
+
             foreach(QGraphicsItem * item, sceneItems){
-                if (item->type() == EntityItem::Type){
-                    bool exists= false;
-                    foreach(EntityItem* item2, ents){
-                        if(((IGraphicItem*)item)->getName() == item2->getName())
-                            exists = true;
-                    }
-                    if(!exists)
-                        ui->listEnt->insertItem(0, ((IGraphicItem*)item)->getName());
+                if(item->type() == EntityItem::Type && isSonValid((EntityItem*)item)){
+                    names << ((IGraphicItem*)item)->getName();
                 }
             }
 
+            std::sort(names.begin(), names.end());
+            ui->listEnt->insertItems(0, names);
+            names.clear();
+
             on_exclusiveBool_clicked(hierarchy->getExclusive());
-            //if(hierarchy->getExclusive())
             if(hierarchy->getTotal())
                 ui->totalBool->setCheckState(Qt::Checked);
-
-            /*ui->e1ComboBox->setEnabled(false);
-            ui->e2ComboBox->setEnabled(false);
-            ui->e3ComboBox->setEnabled(false);
-
-            updateEntities(ents.size()-1);
-            if (ents.size() == 1){
-                ((QLineEdit*)entitiesUi.at(1)->itemAt(2)->widget())->setText(QString::number(rship->getCardinalities().at(1)->getMin()));
-                ((QLineEdit*)entitiesUi.at(1)->itemAt(3)->widget())->setText(rship->getCardinalities().at(1)->getMax());
-            }
-            updateWeakEntUI();*/
             break;
         }
     }
@@ -349,23 +285,4 @@ void HierarchyDialog::on_lineEdit_editingFinished()
             }
         }
     }
-}
-
-bool HierarchyDialog::existsSupertype()
-{
-    /*Entity * father = NULL;
-    foreach(QGraphicsItem * item, sceneItems){
-        if (item->type() == EntityItem::Type){
-            if(((IGraphicItem*)item)->getName() == ui->sup->currentText())
-                father = ((EntityItem*)((IGraphicItem*)item)->getERItem())->getFather();
-        }
-    }
-    while(father != NULL){
-        for(int i = 0; i < ui->listSub->count(); i++){
-            if(ui->listSub->item(i)->text() == father->getName())
-                return true;
-        }
-        father = father->getFather();
-    }*/
-    return false;
 }

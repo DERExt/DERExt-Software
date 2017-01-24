@@ -6,41 +6,40 @@
 HierarchyItem::HierarchyItem(GraphicView * graphicsView, Error * error, QWidget * parent,
                             QString typeName, bool exclusive, bool total, QList<EntityItem*> ents)
 {
-    if(ents.size() > 2){
+    if(ents.size() > 1){
         this->graphicView = graphicsView;
         this->error = error;
         this->parent = parent;
         this->entities = ents;
-        this->exclusive = exclusive;
-        this->total = total;
         this->typeName = typeName;
         this->name = "Hierarchy " + ents.at(0)->getName();
-        isMoving = false;
-        this->setFlag(ItemIsMovable, true);
-        this->setFlag(ItemSendsGeometryChanges,true);
-        this->setFlag(ItemIsSelectable,true);
+        this->setFlag(ItemIsMovable, false);
+        this->setFlag(ItemSendsGeometryChanges,false);
+        this->setFlag(ItemIsSelectable,false);
         QList<Entity *> entitiesNoItem;
+        entities.at(0)->setHierarchy(this);
         foreach(EntityItem* item, entities){
-            item->addHierarchy(this);
             entitiesNoItem << (Entity*)item->getERItem();
         }
+        for(int i = 1; i < entities.count(); i++)
+            entities.at(i)->setHierarchySon(this);
         hierarchy = new Hierarchy(typeName, exclusive, total, error, entitiesNoItem);
     }
 }
 
 bool HierarchyItem::getExclusive()
 {
-    return this->exclusive;
+    return this->hierarchy->isExclusive();
 }
 
 bool HierarchyItem::getTotal()
 {
-    return this->total;
+    return this->hierarchy->isTotal();
 }
 
 QString HierarchyItem::getTypeName()
 {
-    return this->typeName;
+    return this->hierarchy->getTypeName();
 }
 
 void HierarchyItem::setTypeName(QString typeName)
@@ -58,44 +57,22 @@ void HierarchyItem::setName(QString name)
     this->name = "Hierarchy " + name;;
 }
 
-bool HierarchyItem::addAttribute(Attribute *attribute, QString parent)
-{
-    /*No implementar, no posee*/
-}
+bool HierarchyItem::addAttribute(Attribute *attribute, QString parent){}
 
-bool HierarchyItem::removeAttribute(QString attributesName)
-{
-    /*No implementar, no posee*/
-}
+bool HierarchyItem::removeAttribute(QString attributesName){}
 
-QList<Attribute *> HierarchyItem::getAllAttributes()
-{
-    /*No implementar, no posee*/
-}
+QList<Attribute *> HierarchyItem::getAllAttributes(){}
 
-QList<Attribute *> HierarchyItem::getAttributes()
-{
-    /*No implementar, no posee*/
-}
+QList<Attribute *> HierarchyItem::getAttributes(){}
 
-void HierarchyItem::setPosition()
-{
+void HierarchyItem::setPosition(){}
 
-}
+void HierarchyItem::setPosition(QPointF pos){}
 
-void HierarchyItem::setPosition(QPointF pos)
-{
+void HierarchyItem::setRelationship(Hierarchy *rship){}
 
-}
-
-void HierarchyItem::setRelationship(Hierarchy *rship)
-{
-    /*No implementar, no posee*/
-}
-
-QString HierarchyItem::getType()
-{
-
+QString HierarchyItem::getType(){
+    return QString("Hierarchy");
 }
 
 int HierarchyItem::type() const
@@ -118,75 +95,57 @@ QList<EntityItem *> HierarchyItem::getEntities()
     return this->entities;
 }
 
-QList<Cardinality *> HierarchyItem::getCardinalities()
-{
-
-}
-
-bool HierarchyItem::moveAttribute(QString attribute, int row, int pos, QTableWidget *table)
-{
-
-}
+QList<Cardinality *> HierarchyItem::getCardinalities(){}
+bool HierarchyItem::moveAttribute(QString attribute, int row, int pos, QTableWidget *table){}
 
 ERItem *HierarchyItem::getERItem()
 {
-
+    return this->hierarchy;
 }
 QVariant HierarchyItem::itemChange(QGraphicsItem::GraphicsItemChange change, const QVariant &value)
 {
     if (change == ItemSceneChange){
-        if (this->scene() == NULL)          //agregado por primera vez
+        if (this->scene() == NULL)
             reloadEntities();
-        else
+        else{
             removeFromEntities();
+        }
     }
     return QGraphicsItem::itemChange(change,value);
 }
 
 void HierarchyItem::reloadEntities()
 {
-    //when changing scene, the pointer to the entities must be updated to the ones in such scene.
     if (graphicView != NULL){
         QList<EntityItem*> result;
         foreach(EntityItem* item , entities)
-            result.append((EntityItem*)this->graphicView->getItem(item->getName()));
+            result.push_back((EntityItem*)this->graphicView->getItem(item->getName()));
         entities.clear();
         entities.append(result);
         removeFromEntities();
-        foreach(EntityItem* item , entities)
-            item->addHierarchy(this);
-
-        /*QList<Entity*> ents;
-        foreach(EntityItem * ent, entities)
-            ents << (Entity*)ent->getERItem();
-        if (entities.size() == 1)       //unary rship
-            ents << (Entity*)entities.at(0)->getERItem();
-        hrchy->setEntities(ents);*/
+        entities.at(0)->setHierarchy(this);
+        for(int i = 1; i < entities.count(); i++)
+            entities.at(i)->setHierarchySon(this);
     }
 }
 
 void HierarchyItem::removeFromEntities()
 {
-    foreach(EntityItem* item, entities){
-        item->removeHierarchy(this);
-    }
+    entities.at(0)->RemoveHierarchy();
+    for(int i = 1; i < entities.count(); i++)
+        entities.at(i)->RemoveHierarchySon();
 }
 
 IGraphicItem *HierarchyItem::getCopy()
 {
     HierarchyItem *item;
-    item = new HierarchyItem(graphicView, error, parent, typeName, exclusive, total, entities);
+    item = new HierarchyItem(graphicView, error, parent, typeName, hierarchy->isExclusive(), hierarchy->isTotal(), entities);
     return item;
-}
-
-void HierarchyItem::adjust()
-{
-
 }
 
 QString HierarchyItem::getDerivation()
 {
-
+    return this->hierarchy->getDerivation();
 }
 
 void HierarchyItem::getXML(QDomDocument *document, QDomElement *root)
@@ -224,29 +183,23 @@ QRectF HierarchyItem::boundingRect() const
 
 void HierarchyItem::paint(QPainter *painter, const QStyleOptionGraphicsItem *, QWidget *)
 {
+    updateEntities();
     prepareGeometryChange(); //permite ver como se mueve en tiempo real
     painter->setPen(QPen(Qt::black, 1, Qt::SolidLine, Qt::RoundCap, Qt::RoundJoin));
     QRectF base = boundingRect();
     QPen pen = painter->pen();
     painter->setBrush(Qt::white);
-
-    /*if (this->isSelected()){
-        painter->setPen(Qt::DashLine);
-        painter->drawRect(boundingRect());
-    }*/
-    //painter->drawRect(base);
     QPointF puntoElipse(base.x()+base.width()/2, base.y()+base.height()/2);
 
     /*Conecta las entidades*/
     float elipseDim = 35/2;
     QRectF elipseRec(QPointF(puntoElipse.x()-elipseDim,puntoElipse.y()-elipseDim), QSizeF(35, 35));
     foreach(EntityItem * item, entities){
-        //QPointF pto =
         QPointF pto = rectangleCenter(item);
         painter->drawLine(puntoElipse, pto);
     }
     painter->setPen(QPen(Qt::black, 2, Qt::SolidLine, Qt::RoundCap, Qt::RoundJoin));
-    if(total){
+    if(hierarchy->isTotal()){
        QPointF punto(4, 4);
        QPointF punto2(2, 2);
        painter->drawLine(puntoElipse.operator +=(punto), rectangleCenter(entities.at(0)).operator +=(punto2));
@@ -256,22 +209,12 @@ void HierarchyItem::paint(QPainter *painter, const QStyleOptionGraphicsItem *, Q
         painter->drawLine(puntoElipse, rectangleCenter(entities.at(0)));
     painter->setPen(QPen(Qt::black, 1, Qt::SolidLine, Qt::RoundCap, Qt::RoundJoin));
     painter->drawEllipse(elipseRec);
-    if(exclusive){
+    if(hierarchy->isExclusive()){
         painter->drawText(elipseRec,Qt::AlignCenter, "d");
-        painter->drawText((puntoElipse.x()+entities.at(0)->x())/2+15,puntoElipse.y()-25, this->typeName);
+        painter->drawText((puntoElipse.x()+entities.at(0)->x())/2+15,puntoElipse.y()-25, "  "+this->typeName);
     }
     else
         painter->drawText(elipseRec,Qt::AlignCenter, "O");
-}
-
-QPointF *HierarchyItem::intersect(QList<QLineF> lines, QLineF line)
-{
-
-}
-
-QPointF *HierarchyItem::intersectRect(QRectF rect, QLineF line)
-{
-
 }
 
 QPointF HierarchyItem::rectangleCenter(EntityItem *item)
@@ -282,30 +225,25 @@ QPointF HierarchyItem::rectangleCenter(EntityItem *item)
     return QPointF(centerX,centerY);
 }
 
+void HierarchyItem::load(QDomElement *e){}
 
-
-void HierarchyItem::mousePressEvent(QGraphicsSceneMouseEvent *event)
+void HierarchyItem::removeEntity(EntityItem *item)
 {
-    isMoving = true;
-    update();
-    QGraphicsItem::mousePressEvent(event);
+    if(item != NULL)
+        entities.removeAll(item);
 }
 
-void HierarchyItem::mouseMoveEvent(QGraphicsSceneMouseEvent *event)
-{
-    /*if (isMoving)
-       QGraphicsItem::mouseMoveEvent(event);*/
-}
-
-void HierarchyItem::mouseReleaseEvent(QGraphicsSceneMouseEvent *event)
-{
-    isMoving = false;
-    update();
-    QGraphicsItem::mouseReleaseEvent(event);
-
-}
-
-void HierarchyItem::load(QDomElement *e)
-{
-
+void HierarchyItem::updateEntities(){
+    QList<EntityItem*> aux;
+    QList<Entity*> auxNoItem;
+    foreach(EntityItem* item, entities){
+        if(graphicView->getItem(item->getName()) != NULL){
+            EntityItem *entAux =((EntityItem*)graphicView->getItem(item->getName()));
+            aux << entAux;
+            auxNoItem << ((Entity*)entAux->getERItem());
+        }
+    }
+    entities.clear();
+    entities.append(aux);
+    hierarchy->setEntities(auxNoItem);
 }
